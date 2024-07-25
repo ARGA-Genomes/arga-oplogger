@@ -18,4 +18,5 @@
   };
 
   cachix.enable = false;
+  dotenv.disableHint = true;
 }

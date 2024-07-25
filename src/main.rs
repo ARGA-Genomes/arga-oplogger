@@ -1,6 +1,6 @@
 mod database;
 mod errors;
-// mod specimens;
+mod operations;
 mod taxa;
 
 use std::path::PathBuf;
@@ -8,6 +8,10 @@ use std::path::PathBuf;
 use clap::Parser;
 use database::create_dataset_version;
 use errors::Error;
+
+
+pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
+pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
 
 
 /// The ARGA operation logger
