@@ -3,19 +3,20 @@ mod utils;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use arga_core::crdt::lww::Map;
 use arga_core::crdt::{DataFrame, Version};
-use arga_core::models::{TaxonAtom, TaxonOperation, TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
 use arga_core::schema;
 use diesel::*;
 use indicatif::{ProgressBar, ProgressStyle};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utils::{taxonomic_rank_from_str, taxonomic_status_from_str};
 use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::database::get_pool;
 use crate::errors::Error;
-use crate::operations::merge_operations;
+use crate::operations::{group_operations, merge_operations};
 use crate::{PROGRESS_TEMPLATE, SPINNER_TEMPLATE};
 
 
@@ -56,12 +57,47 @@ struct Record {
 }
 
 
+/// The ARGA taxon CSV record output
+/// This is the record in a CSV after reducing the taxa logs
+/// from multiple datasets.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct Taxon {
+    /// The id of this record entity in the taxa logs
+    entity_id: String,
+    /// The id of the taxon as determined by the source dataset
+    taxon_id: String,
+    /// The scientific name of the parent taxon. Useful for taxonomy trees
+    parent_taxon: Option<String>,
+    /// The external identifier of the source dataset as determined by ARGA
+    dataset_id: Option<String>,
+
+    /// The name of the taxon. Should include author when possible
+    scientific_name: String,
+    /// The authorship of the taxon
+    scientific_name_authorship: Option<String>,
+    /// The name of the taxon without the author
+    canonical_name: String,
+    /// The code used to define the taxon. Eg. ICZN
+    nomenclatural_code: String,
+
+    /// The rank of the taxon. Refer to TaxonomicRank for all options
+    taxon_rank: TaxonomicRank,
+    /// The status of the taxon. Refer to TaxonomicStatus for all options
+    taxonomic_status: TaxonomicStatus,
+
+    citation: Option<String>,
+    references: Option<String>,
+    last_updated: Option<String>,
+}
+
+
 pub struct Taxa {
     pub path: PathBuf,
     pub dataset_version_id: Uuid,
 }
 
 impl Taxa {
+    /// Process a taxonomy CSV file and convert the records to a list of operations.
     pub fn taxa(&self) -> Result<Vec<TaxonOperation>, Error> {
         use TaxonAtom::*;
 
@@ -134,6 +170,11 @@ impl Taxa {
         Ok(operations)
     }
 
+    /// Import the CSV file as taxon operations into the taxa_logs table.
+    ///
+    /// This will parse and decompose the CSV file, merge it with the existing taxa logs
+    /// and then insert them into the database, effectively updating taxa_logs with the
+    /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
         use schema::taxa_logs::dsl::*;
 
@@ -188,5 +229,101 @@ impl Taxa {
         bar.finish();
         println!("Imported {total_imported} taxon operations");
         Ok(())
+    }
+
+    /// Reduce the entire taxa_logs table into an ARGA CSV file.
+    ///
+    /// This will generate a snapshot of every taxon built from all datasets
+    /// using the last-write-win CRDT map. The snapshot output is a reproducible
+    /// dataset that should be imported into the ARGA database and used by the application.
+    pub fn reduce() -> Result<(), Error> {
+        use schema::taxa_logs::dsl::*;
+        use schema::{dataset_versions, datasets};
+
+        let pool = get_pool()?;
+        let mut conn = pool.get()?;
+
+        let ops = taxa_logs
+            .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
+            .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
+            .order(operation_id.asc())
+            .load::<TaxonOperationWithDataset>(&mut conn)?;
+
+        let entities = group_operations(ops, vec![])?;
+        let mut taxa = Vec::new();
+
+        for (key, ops) in entities.into_iter() {
+            let mut map = Map::new(key);
+            map.reduce(&ops);
+
+            // include the dataset global id in the reduced output to
+            // allow for multiple taxonomic systems
+            let mut taxon = Taxon::from(map);
+            if let Some(op) = ops.first() {
+                taxon.dataset_id = Some(op.dataset.global_id.clone());
+                taxa.push(taxon);
+            }
+        }
+
+        // our taxa table has a unique constraint on scientific name and dataset id.
+        // some data sources will duplicate a taxon (separate record id) to record
+        // multiple accepted names. we sort and deduplicate it here since the relationship
+        // between taxa isn't of concern here, just the name itself.
+        taxa.sort_by(|a, b| {
+            a.dataset_id
+                .cmp(&b.dataset_id)
+                .then_with(|| a.scientific_name.cmp(&b.scientific_name))
+        });
+        taxa.dedup_by(|a, b| a.scientific_name == b.scientific_name && a.dataset_id == b.dataset_id);
+
+        let mut writer = csv::Writer::from_writer(std::io::stdout());
+
+        for taxon in taxa {
+            writer.serialize(taxon)?;
+        }
+
+        Ok(())
+    }
+}
+
+
+/// Converts a LWW CRDT map of taxon atoms to a Taxon record for serialisation
+impl From<Map<TaxonAtom>> for Taxon {
+    fn from(value: Map<TaxonAtom>) -> Self {
+        use TaxonAtom::*;
+
+        let mut taxon = Taxon {
+            entity_id: value.entity_id,
+            ..Default::default()
+        };
+
+        for val in value.atoms.into_values() {
+            match val {
+                Empty => {}
+                TaxonId(value) => taxon.taxon_id = value,
+                ParentTaxon(value) => taxon.parent_taxon = Some(value),
+                ScientificName(value) => taxon.scientific_name = value,
+                Authorship(value) => taxon.scientific_name_authorship = Some(value),
+                CanonicalName(value) => taxon.canonical_name = value,
+                NomenclaturalCode(value) => taxon.nomenclatural_code = value,
+                TaxonomicRank(value) => taxon.taxon_rank = value,
+                TaxonomicStatus(value) => taxon.taxonomic_status = value,
+                Citation(value) => taxon.citation = Some(value),
+                References(value) => taxon.references = Some(value),
+                LastUpdated(value) => taxon.last_updated = Some(value),
+
+                // fields currently not supported
+                AcceptedNameUsageId(_value) => {}
+                ParentNameUsageId(_value) => {}
+                AcceptedNameUsage(_value) => {}
+                ParentNameUsage(_value) => {}
+                NomenclaturalStatus(_value) => {}
+                NamePublishedIn(_value) => {}
+                NamePublishedInYear(_value) => {}
+                NamePublishedInUrl(_value) => {}
+            }
+        }
+
+        taxon
     }
 }

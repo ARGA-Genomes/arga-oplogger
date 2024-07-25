@@ -27,6 +27,10 @@ pub enum Commands {
     /// Process and import a csv as operation logs
     #[command(subcommand)]
     Import(ImportCommand),
+
+    /// Reduce operation logs and output as an ARGA CSV
+    #[command(subcommand)]
+    Reduce(ReduceCommand),
 }
 
 #[derive(clap::Subcommand)]
@@ -42,6 +46,12 @@ pub enum ImportCommand {
         /// The path to the CSV file to import as operation logs
         path: PathBuf,
     },
+}
+
+#[derive(clap::Subcommand)]
+pub enum ReduceCommand {
+    /// Reduce taxa logs into a taxonomy CSV
+    Taxa,
 }
 
 
@@ -65,6 +75,9 @@ fn main() -> Result<(), Error> {
                 };
                 taxa.import()?
             }
+        },
+        Commands::Reduce(cmd) => match cmd {
+            ReduceCommand::Taxa => taxa::Taxa::reduce()?,
         },
     }
 
