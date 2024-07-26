@@ -2,16 +2,14 @@ mod database;
 mod errors;
 mod operations;
 mod taxa;
+mod taxonomic_acts;
+mod utils;
 
 use std::path::PathBuf;
 
 use clap::Parser;
 use database::create_dataset_version;
 use errors::Error;
-
-
-pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
-pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
 
 
 /// The ARGA operation logger
@@ -31,6 +29,10 @@ pub enum Commands {
     /// Reduce operation logs and output as an ARGA CSV
     #[command(subcommand)]
     Reduce(ReduceCommand),
+
+    /// Update the database with the latest reduced data
+    #[command(subcommand)]
+    Update(UpdateCommand),
 }
 
 #[derive(clap::Subcommand)]
@@ -46,17 +48,40 @@ pub enum ImportCommand {
         /// The path to the CSV file to import as operation logs
         path: PathBuf,
     },
+
+    /// Import taxonomic acts from a CSV dataset
+    TaxonomicActs {
+        /// The global identifier describing the dataset
+        dataset_id: String,
+        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
+        version: String,
+        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
+        created_at: String,
+        /// The path to the CSV file to import as operation logs
+        path: PathBuf,
+    },
 }
 
 #[derive(clap::Subcommand)]
 pub enum ReduceCommand {
-    /// Reduce taxa logs into a taxonomy CSV
+    /// Reduce taxa logs into a CSV
     Taxa,
+    /// Reduce taxonomic act logs into a CSV
+    TaxonomicActs,
+}
+
+#[derive(clap::Subcommand)]
+pub enum UpdateCommand {
+    /// Update the taxa with the reduced logs
+    Taxa,
+    /// Update taxonomic acts with the reduced logs
+    TaxonomicActs,
 }
 
 
 fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
+    tracing_subscriber::fmt::init();
 
     let cli = Cli::parse();
 
@@ -75,9 +100,41 @@ fn main() -> Result<(), Error> {
                 };
                 taxa.import()?
             }
+
+            ImportCommand::TaxonomicActs {
+                dataset_id,
+                version,
+                created_at,
+                path,
+            } => {
+                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+                let taxa = taxonomic_acts::TaxonomicActs {
+                    path: path.clone(),
+                    dataset_version_id: dataset_version.id,
+                };
+                taxa.import()?
+            }
         },
         Commands::Reduce(cmd) => match cmd {
-            ReduceCommand::Taxa => taxa::Taxa::reduce()?,
+            ReduceCommand::Taxa => {
+                let records = taxa::Taxa::reduce()?;
+                let mut writer = csv::Writer::from_writer(std::io::stdout());
+                for record in records {
+                    writer.serialize(record)?;
+                }
+            }
+            ReduceCommand::TaxonomicActs => {
+                let records = taxonomic_acts::TaxonomicActs::reduce()?;
+                let mut writer = csv::Writer::from_writer(std::io::stdout());
+                for record in records {
+                    writer.serialize(record)?;
+                }
+            }
+        },
+
+        Commands::Update(cmd) => match cmd {
+            UpdateCommand::Taxa => taxa::Taxa::update()?,
+            UpdateCommand::TaxonomicActs => taxonomic_acts::TaxonomicActs::update()?,
         },
     }
 

@@ -1,23 +1,20 @@
-mod utils;
-
 use std::path::PathBuf;
-use std::time::Duration;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::{DataFrame, Version};
-use arga_core::models::{TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{self, TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
 use arga_core::schema;
 use diesel::*;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressIterator;
 use serde::{Deserialize, Serialize};
-use utils::{taxonomic_rank_from_str, taxonomic_status_from_str};
+use tracing::info;
 use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::database::get_pool;
+use crate::database::{dataset_lookup, get_pool};
 use crate::errors::Error;
 use crate::operations::{group_operations, merge_operations};
-use crate::{PROGRESS_TEMPLATE, SPINNER_TEMPLATE};
+use crate::utils::{new_progress_bar, new_spinner, taxonomic_rank_from_str, taxonomic_status_from_str};
 
 
 type TaxonFrame = DataFrame<TaxonAtom>;
@@ -69,7 +66,7 @@ pub struct Taxon {
     /// The scientific name of the parent taxon. Useful for taxonomy trees
     parent_taxon: Option<String>,
     /// The external identifier of the source dataset as determined by ARGA
-    dataset_id: Option<String>,
+    dataset_id: String,
 
     /// The name of the taxon. Should include author when possible
     scientific_name: String,
@@ -101,24 +98,12 @@ impl Taxa {
     pub fn taxa(&self) -> Result<Vec<TaxonOperation>, Error> {
         use TaxonAtom::*;
 
-        let style = ProgressStyle::with_template(PROGRESS_TEMPLATE).expect("Invalid progress bar template");
-        let spinner = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
-
-        let bar = ProgressBar::new_spinner()
-            .with_message("Parsing taxonomy CSV file")
-            .with_style(spinner);
-        bar.enable_steady_tick(Duration::from_millis(100));
-
+        let spinner = new_spinner("Parsing taxonomy CSV file");
         let mut records: Vec<Record> = Vec::new();
         for row in csv::Reader::from_path(&self.path)?.deserialize() {
             records.push(row?);
         }
-        bar.finish();
-
-
-        let bar = ProgressBar::new(records.len() as u64)
-            .with_message("Decomposing records into taxa operation logs")
-            .with_style(style);
+        spinner.finish();
 
         // an operation represents one field and a record is a single entity so we have a logical grouping
         // that would be ideal to represent as a frame (like a database transaction). this allows us to
@@ -127,7 +112,8 @@ impl Taxa {
         let mut last_version = Version::new();
         let mut operations: Vec<TaxonOperation> = Vec::new();
 
-        for record in records.into_iter() {
+        let bar = new_progress_bar(records.len(), "Decomposing records into operation logs");
+        for record in records.into_iter().progress_with(bar) {
             // because arga supports multiple taxonomic systems we use the taxon_id
             // from the system as the unique entity id. if we used the scientific name
             // instead then we would combine and reduce changes from all systems which
@@ -162,10 +148,7 @@ impl Taxa {
 
             last_version = frame.last_version();
             operations.extend(frame.collect());
-
-            bar.inc(1);
         }
-        bar.finish();
 
         Ok(operations)
     }
@@ -178,42 +161,30 @@ impl Taxa {
     pub fn import(&self) -> Result<(), Error> {
         use schema::taxa_logs::dsl::*;
 
-        let style = ProgressStyle::with_template(PROGRESS_TEMPLATE).expect("Invalid progress bar template");
-        let spinner = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
-
         let pool = get_pool()?;
         let mut conn = pool.get()?;
-
-        let bar = ProgressBar::new_spinner()
-            .with_message("Loading existing taxon operations")
-            .with_style(spinner.clone());
-        bar.enable_steady_tick(Duration::from_millis(100));
 
         // load the existing operations. this can be quite large it includes
         // all operations ever, and is a grow-only table.
         // a future memory optimised operation could instead group by entity id
         // first and then query large chunks of logs in parallel
-        let taxon_ops = taxa_logs.order(operation_id.asc()).load::<TaxonOperation>(&mut conn)?;
-        bar.finish();
+        let spinner = new_spinner("Loading existing taxon operations");
+        let existing = taxa_logs.order(operation_id.asc()).load::<TaxonOperation>(&mut conn)?;
+        spinner.finish();
 
         // parse and decompose the input file into taxon operations
         let records = self.taxa()?;
 
-        let bar = ProgressBar::new_spinner()
-            .with_message("Merging existing and new operations")
-            .with_style(spinner);
-        bar.enable_steady_tick(Duration::from_millis(100));
-
         // merge the new operations with the existing ones in the database
         // to deduplicate all ops
-        let records = merge_operations(taxon_ops, records)?;
-        bar.finish();
+        let spinner = new_spinner("Merging existing and new operations");
+        let records = merge_operations(existing, records)?;
+        spinner.finish();
 
-        let bar = ProgressBar::new(records.len() as u64)
-            .with_message("Importing taxon operations")
-            .with_style(style);
 
         let mut total_imported = 0;
+        let bar = new_progress_bar(records.len(), "Importing taxon operations");
+
         // finally import the operations. if there is a conflict based on the operation_id
         // then it is a duplicate operation so do nothing with it
         for chunk in records.chunks(1000) {
@@ -227,32 +198,38 @@ impl Taxa {
         }
 
         bar.finish();
-        println!("Imported {total_imported} taxon operations");
+        info!(total = records.len(), total_imported, "Taxa operations import finished");
         Ok(())
     }
 
-    /// Reduce the entire taxa_logs table into an ARGA CSV file.
+    /// Reduce the entire taxa_logs table into a list of Taxon.
     ///
     /// This will generate a snapshot of every taxon built from all datasets
     /// using the last-write-win CRDT map. The snapshot output is a reproducible
     /// dataset that should be imported into the ARGA database and used by the application.
-    pub fn reduce() -> Result<(), Error> {
+    pub fn reduce() -> Result<Vec<Taxon>, Error> {
         use schema::taxa_logs::dsl::*;
         use schema::{dataset_versions, datasets};
 
         let pool = get_pool()?;
         let mut conn = pool.get()?;
 
+        let spinner = new_spinner("Loading taxa logs");
         let ops = taxa_logs
             .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
             .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
             .order(operation_id.asc())
             .load::<TaxonOperationWithDataset>(&mut conn)?;
+        spinner.finish();
 
+        let spinner = new_spinner("Grouping taxa logs");
         let entities = group_operations(ops, vec![])?;
+        spinner.finish();
+
         let mut taxa = Vec::new();
 
-        for (key, ops) in entities.into_iter() {
+        let bar = new_progress_bar(entities.len(), "Reducing operations");
+        for (key, ops) in entities.into_iter().progress_with(bar) {
             let mut map = Map::new(key);
             map.reduce(&ops);
 
@@ -260,7 +237,7 @@ impl Taxa {
             // allow for multiple taxonomic systems
             let mut taxon = Taxon::from(map);
             if let Some(op) = ops.first() {
-                taxon.dataset_id = Some(op.dataset.global_id.clone());
+                taxon.dataset_id = op.dataset.global_id.clone();
                 taxa.push(taxon);
             }
         }
@@ -269,6 +246,8 @@ impl Taxa {
         // some data sources will duplicate a taxon (separate record id) to record
         // multiple accepted names. we sort and deduplicate it here since the relationship
         // between taxa isn't of concern here, just the name itself.
+        let spinner = new_spinner("Deduplicating taxa");
+
         taxa.sort_by(|a, b| {
             a.dataset_id
                 .cmp(&b.dataset_id)
@@ -276,12 +255,75 @@ impl Taxa {
         });
         taxa.dedup_by(|a, b| a.scientific_name == b.scientific_name && a.dataset_id == b.dataset_id);
 
-        let mut writer = csv::Writer::from_writer(std::io::stdout());
+        spinner.finish();
+        Ok(taxa)
+    }
 
-        for taxon in taxa {
-            writer.serialize(taxon)?;
+    pub fn update() -> Result<(), Error> {
+        use diesel::upsert::excluded;
+        use schema::taxa::dsl::*;
+
+        let mut pool = get_pool()?;
+        let mut conn = pool.get()?;
+
+        // reduce the logs and convert the record to the model equivalent. this means
+        // linking up the records to the database ids based on a lookup
+        let datasets = dataset_lookup(&mut pool)?;
+
+        let mut records = Vec::new();
+        for record in Self::reduce()? {
+            let dataset_uuid = datasets.get(&record.dataset_id).expect("Cannot find dataset");
+
+            records.push(models::Taxon {
+                id: Uuid::new_v4(),
+                dataset_id: dataset_uuid.clone(),
+                parent_id: None,
+                entity_id: Some(record.entity_id),
+                status: record.taxonomic_status,
+                rank: record.taxon_rank,
+                scientific_name: record.scientific_name,
+                canonical_name: record.canonical_name,
+                authorship: record.scientific_name_authorship,
+                nomenclatural_code: record.nomenclatural_code,
+                citation: record.citation,
+                vernacular_names: None,
+                description: None,
+                remarks: None,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            })
         }
 
+        // finally import the operations. if there is a conflict based on the operation_id
+        // then it is a duplicate operation so do nothing with it
+        let bar = new_progress_bar(records.len(), "Importing taxa");
+        for chunk in records.chunks(1000) {
+            // postgres always creates a new row version so we cant get
+            // an actual figure of the amount of records changed
+            diesel::insert_into(taxa)
+                .values(chunk)
+                .on_conflict((scientific_name, dataset_id))
+                .do_update()
+                .set((
+                    entity_id.eq(excluded(entity_id)),
+                    status.eq(excluded(status)),
+                    rank.eq(excluded(rank)),
+                    canonical_name.eq(excluded(canonical_name)),
+                    authorship.eq(excluded(authorship)),
+                    nomenclatural_code.eq(excluded(nomenclatural_code)),
+                    citation.eq(excluded(citation)),
+                    vernacular_names.eq(excluded(vernacular_names)),
+                    description.eq(excluded(description)),
+                    remarks.eq(excluded(remarks)),
+                    updated_at.eq(excluded(updated_at)),
+                ))
+                .execute(&mut conn)?;
+
+            bar.inc(1000);
+        }
+
+        bar.finish();
+        info!(total = records.len(), "Taxa import finished");
         Ok(())
     }
 }

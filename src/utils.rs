@@ -1,7 +1,34 @@
+use std::time::Duration;
+
 use arga_core::models::{TaxonomicRank, TaxonomicStatus};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 
 use crate::errors::ParseError;
+
+
+pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
+pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
+
+
+pub fn new_spinner(message: &str) -> ProgressBar {
+    let style = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
+    let spinner = ProgressBar::new_spinner()
+        .with_message(message.to_string())
+        .with_style(style);
+
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner
+}
+
+pub fn new_progress_bar(total: usize, message: &str) -> ProgressBar {
+    let style = ProgressStyle::with_template(PROGRESS_TEMPLATE).expect("Invalid progress bar template");
+    let bar = ProgressBar::new(total as u64)
+        .with_message(message.to_string())
+        .with_style(style);
+
+    bar
+}
 
 
 pub fn taxonomic_rank_from_str<'de, D>(deserializer: D) -> Result<TaxonomicRank, D::Error>
