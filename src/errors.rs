@@ -18,4 +18,7 @@ pub enum Error {
 pub enum ParseError {
     #[error("invalid value: {0}")]
     InvalidValue(String),
+
+    #[error(transparent)]
+    DateFormat(#[from] chrono::ParseError),
 }

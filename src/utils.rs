@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use arga_core::models::{TaxonomicRank, TaxonomicStatus};
+use chrono::{DateTime, Utc};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 
@@ -211,4 +212,34 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
 
         val => Err(ParseError::InvalidValue(val.to_string())),
     }
+}
+
+
+pub fn parse_date_time(value: &str) -> Result<DateTime<Utc>, ParseError> {
+    if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%z") {
+        return Ok(datetime.into());
+    }
+    if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%#z") {
+        return Ok(datetime.into());
+    }
+    if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.3f%#z") {
+        return Ok(datetime.into());
+    }
+    // Ok(DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.3fZ")?.into())
+    Ok(DateTime::parse_from_rfc3339(value)?.into())
+}
+
+pub fn date_time_from_str_opt<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: Option<String> = Deserialize::deserialize(deserializer)?;
+
+    Ok(match s {
+        None => None,
+        Some(s) => match parse_date_time(&s) {
+            Ok(date) => Some(date),
+            Err(_) => None,
+        },
+    })
 }

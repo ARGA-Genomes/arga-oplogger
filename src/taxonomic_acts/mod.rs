@@ -12,6 +12,7 @@ use arga_core::models::{
     TaxonomicStatus,
 };
 use arga_core::schema;
+use chrono::{DateTime, Utc};
 use diesel::*;
 use indicatif::ProgressIterator;
 use serde::{Deserialize, Serialize};
@@ -22,7 +23,7 @@ use xxhash_rust::xxh3::Xxh3;
 use crate::database::{dataset_lookup, get_pool, taxon_lookup};
 use crate::errors::Error;
 use crate::operations::{group_operations, merge_operations};
-use crate::utils::{new_progress_bar, new_spinner, taxonomic_status_from_str};
+use crate::utils::{date_time_from_str_opt, new_progress_bar, new_spinner, taxonomic_status_from_str};
 
 
 type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
@@ -45,6 +46,13 @@ struct Record {
     #[serde(deserialize_with = "taxonomic_status_from_str")]
     taxonomic_status: TaxonomicStatus,
 
+    /// The timestamp of when the record was created at the data source
+    #[serde(deserialize_with = "date_time_from_str_opt")]
+    created_at: Option<DateTime<Utc>>,
+    /// The timestamp of when the record was update at the data source
+    #[serde(deserialize_with = "date_time_from_str_opt")]
+    updated_at: Option<DateTime<Utc>>,
+
     references: Option<String>,
 }
 
@@ -66,6 +74,11 @@ pub struct TaxonomicAct {
 
     /// The taxonomic act of this record
     act: Option<TaxonomicActType>,
+
+    /// The timestamp of when the data was created in the dataset
+    data_created_at: Option<DateTime<Utc>>,
+    /// The timestamp of when the data was updated in the dataset
+    data_updated_at: Option<DateTime<Utc>>,
 
     publication: Option<String>,
     publication_date: Option<String>,
@@ -134,6 +147,12 @@ impl TaxonomicActs {
             }
             if let Some(value) = record.references {
                 frame.push(SourceUrl(value));
+            }
+            if let Some(value) = record.created_at {
+                frame.push(CreatedAt(value));
+            }
+            if let Some(value) = record.updated_at {
+                frame.push(UpdatedAt(value));
             }
 
             last_version = frame.last_version();
@@ -278,6 +297,8 @@ impl TaxonomicActs {
                     source_url: record.source_url,
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
+                    data_created_at: record.data_created_at,
+                    data_updated_at: record.data_updated_at,
                 })
             }
         }
@@ -299,6 +320,8 @@ impl TaxonomicActs {
                     act.eq(excluded(act)),
                     source_url.eq(excluded(source_url)),
                     updated_at.eq(excluded(updated_at)),
+                    data_created_at.eq(excluded(data_created_at)),
+                    data_updated_at.eq(excluded(data_updated_at)),
                 ))
                 .execute(&mut conn)?;
 
@@ -332,6 +355,8 @@ impl From<Map<TaxonomicActAtom>> for TaxonomicAct {
                 AcceptedTaxon(value) => act.accepted_taxon = Some(value),
                 Act(value) => act.act = Some(value),
                 SourceUrl(value) => act.source_url = Some(value),
+                CreatedAt(value) => act.data_created_at = Some(value),
+                UpdatedAt(value) => act.data_updated_at = Some(value),
             }
         }
 
