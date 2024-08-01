@@ -123,7 +123,7 @@ impl TaxonomicActs {
                 _ => None,
             };
 
-            // skip anything that isn't a synonym
+            // skip anything that isn't supported
             if act.is_none() {
                 continue;
             }

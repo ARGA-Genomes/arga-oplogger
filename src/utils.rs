@@ -247,7 +247,15 @@ pub fn parse_date_time(value: &str) -> Result<DateTime<Utc>, ParseError> {
     if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.3f%#z") {
         return Ok(datetime.into());
     }
-    // Ok(DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.3fZ")?.into())
+    // format used in afd
+    if let Ok(datetime) = DateTime::parse_from_str(value, "%Y%m%dT%H:%M:%S%.3f%#z") {
+        return Ok(datetime.into());
+    }
+    // rfc3339 doesn't include millis so we support the deviation here
+    if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.3f%#z") {
+        return Ok(datetime.into());
+    }
+
     Ok(DateTime::parse_from_rfc3339(value)?.into())
 }
 
