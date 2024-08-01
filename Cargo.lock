@@ -964,6 +964,7 @@ dependencies = [
  "csv",
  "diesel",
  "dotenvy",
+ "heck 0.5.0",
  "indicatif",
  "rayon",
  "serde",

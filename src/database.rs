@@ -9,9 +9,40 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::errors::Error;
+use crate::utils::new_spinner;
 
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
+
+/// A String map. The value is a Uuid associated with the string. For example, a
+/// name of a dataset stored in this map will return the dataset id when queried.
+pub type StringMap = HashMap<String, Uuid>;
+
+/// A Uuid + String map. The key is a tuple of a uuid and string to allow
+/// for scoping such as all strings from a specific dataset
+pub type UuidStringMap = HashMap<(Uuid, String), Uuid>;
+
+
+/// A refreshable materialized view
+pub enum MaterializedView {
+    TaxaDag,
+    TaxaDagDown,
+    TaxaTree,
+    TaxaTreeStats,
+    Species,
+}
+
+impl std::fmt::Display for MaterializedView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            MaterializedView::TaxaDag => "taxa_dag",
+            MaterializedView::TaxaDagDown => "taxa_dag_down",
+            MaterializedView::TaxaTree => "taxa_tree",
+            MaterializedView::TaxaTreeStats => "taxa_tree_stats",
+            MaterializedView::Species => "species",
+        })
+    }
+}
 
 
 pub fn get_pool() -> Result<PgPool, Error> {
@@ -56,13 +87,18 @@ pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str)
 }
 
 
-/// A String map. The value is a Uuid associated with the string. For example, a
-/// name of a dataset stored in this map will return the dataset id when queried.
-pub type StringMap = HashMap<String, Uuid>;
+/// Refreshes a materialized view.
+/// This can be a costly operation depending on the view being refreshed.
+/// Because we cant use bound parameters on this query we instead use an enum to
+/// ensure that user generated content never gets injected.
+pub fn refresh_materialized_view(pool: &mut PgPool, name: MaterializedView) -> Result<(), Error> {
+    let mut conn = pool.get()?;
+    let spinner = new_spinner(&format!("Refreshing {name}"));
+    sql_query(format!("REFRESH MATERIALIZED VIEW {name}")).execute(&mut conn)?;
+    spinner.finish();
+    Ok(())
+}
 
-/// A Uuid + String map. The key is a tuple of a uuid and string to allow
-/// for scoping such as all strings from a specific dataset
-pub type UuidStringMap = HashMap<(Uuid, String), Uuid>;
 
 pub fn dataset_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::datasets::dsl::*;
@@ -99,5 +135,23 @@ pub fn taxon_lookup(pool: &mut PgPool, datasets: &Vec<Uuid>) -> Result<UuidStrin
     }
 
     info!(total = map.len(), "Creating taxa map finished");
+    Ok(map)
+}
+
+
+pub fn name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::names::dsl::*;
+    info!("Creating name map");
+
+    let mut conn = pool.get()?;
+
+    let results = names.select((id, scientific_name)).load::<(Uuid, String)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    for (uuid, lookup) in results {
+        map.insert(lookup, uuid);
+    }
+
+    info!(total = map.len(), "Creating name map finished");
     Ok(map)
 }

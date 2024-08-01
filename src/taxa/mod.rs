@@ -5,16 +5,30 @@ use arga_core::crdt::{DataFrame, Version};
 use arga_core::models::{self, TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
 use arga_core::schema;
 use diesel::*;
-use indicatif::ProgressIterator;
+use indicatif::{ParallelProgressIterator, ProgressIterator};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::database::{dataset_lookup, get_pool};
+use crate::database::{
+    dataset_lookup,
+    get_pool,
+    name_lookup,
+    refresh_materialized_view,
+    taxon_lookup,
+    MaterializedView,
+};
 use crate::errors::Error;
 use crate::operations::{group_operations, merge_operations};
-use crate::utils::{new_progress_bar, new_spinner, taxonomic_rank_from_str, taxonomic_status_from_str};
+use crate::utils::{
+    new_progress_bar,
+    new_spinner,
+    taxonomic_rank_from_str,
+    taxonomic_status_from_str,
+    titleize_first_word,
+};
 
 
 type TaxonFrame = DataFrame<TaxonAtom>;
@@ -124,14 +138,14 @@ impl Taxa {
 
             let mut frame = TaxonFrame::create(hash.to_string(), self.dataset_version_id, last_version);
             frame.push(TaxonId(record.taxon_id));
-            frame.push(ScientificName(record.scientific_name));
-            frame.push(CanonicalName(record.canonical_name));
+            frame.push(ScientificName(titleize_first_word(&record.scientific_name)));
+            frame.push(CanonicalName(titleize_first_word(&record.canonical_name)));
             frame.push(TaxonomicRank(record.taxon_rank));
             frame.push(TaxonomicStatus(record.taxonomic_status));
             frame.push(NomenclaturalCode(record.nomenclatural_code));
 
             if let Some(value) = record.parent_taxon {
-                frame.push(ParentTaxon(value));
+                frame.push(ParentTaxon(titleize_first_word(&value)));
             }
             if let Some(value) = record.scientific_name_authorship {
                 frame.push(Authorship(value));
@@ -324,6 +338,92 @@ impl Taxa {
 
         bar.finish();
         info!(total = records.len(), "Taxa import finished");
+        Ok(())
+    }
+
+    /// Link all taxa to their parent taxon.
+    /// Due to bulk upserts we don't want to set the parent_id for taxa as it is self-referential.
+    /// It is important to link them up after import to enable the taxonomy DAG within the database.
+    /// This will also refresh the necessary materialized views in the database which may take a while.
+    pub fn link() -> Result<(), Error> {
+        use schema::taxa::dsl::*;
+        use schema::taxon_names;
+
+        let mut pool = get_pool()?;
+        let mut conn = pool.get()?;
+
+        // we want to link all taxa datasets so include all of them
+        let datasets = dataset_lookup(&mut pool)?;
+        let dataset_ids = datasets.values().cloned().collect();
+        let names = name_lookup(&mut pool)?;
+        let all_taxa = taxon_lookup(&mut pool, &dataset_ids)?;
+
+        let mut links: Vec<(Uuid, Uuid)> = Vec::new();
+        let mut name_links: Vec<(Uuid, Uuid)> = Vec::new();
+
+        for record in Self::reduce()? {
+            if let Some(dataset_uuid) = datasets.get(&record.dataset_id) {
+                let taxon_lookup = (dataset_uuid.clone(), record.scientific_name.clone());
+                if let Some(taxon_uuid) = all_taxa.get(&taxon_lookup) {
+                    // add a name link if the name can be found in the database
+                    if let Some(name_uuid) = names.get(&record.scientific_name) {
+                        name_links.push((taxon_uuid.clone(), name_uuid.clone()));
+                    }
+
+                    // add a parent link if the taxon can be found in the database
+                    if let Some(parent) = record.parent_taxon {
+                        if let Some(parent_uuid) = all_taxa.get(&(*dataset_uuid, parent)) {
+                            links.push((taxon_uuid.clone(), parent_uuid.clone()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // this closure allows us to get a new connection per worker thread
+        // that rayon spawns with the parallel iterator.
+        let get_conn = || pool.get().unwrap();
+
+        // we cant do a bulk update without resorting to upserts so instead
+        // we use rayon to parallelize to greatly increase the speed
+        let bar = new_progress_bar(links.len(), "Updating parent links");
+        links
+            .par_iter()
+            .progress_with(bar)
+            .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
+                diesel::update(taxa.filter(id.eq(taxon_uuid)))
+                    .set(parent_id.eq(parent_uuid))
+                    .execute(conn)
+                    .expect("Failed to update");
+            });
+
+        // all data links to a 'name' so that we can use different taxonomic systems represent
+        // the same 'concept' that other data refers to. the taxon_names table provides this
+        // and at a minimum every taxon should link to one name via this through table.
+        let bar = new_progress_bar(name_links.len(), "Importing taxon name links");
+        for chunk in name_links.chunks(10_000) {
+            let mut values = Vec::with_capacity(chunk.len());
+            for (taxon_uuid, name_uuid) in chunk {
+                values.push((taxon_names::taxon_id.eq(taxon_uuid), taxon_names::name_id.eq(name_uuid)))
+            }
+
+            diesel::insert_into(taxon_names::table)
+                .values(values)
+                .on_conflict((taxon_names::taxon_id, taxon_names::name_id))
+                .do_nothing()
+                .execute(&mut conn)?;
+
+            bar.inc(1000);
+        }
+        bar.finish();
+
+        // refresh the views that cache taxa data
+        refresh_materialized_view(&mut pool, MaterializedView::TaxaDag)?;
+        refresh_materialized_view(&mut pool, MaterializedView::TaxaDagDown)?;
+        refresh_materialized_view(&mut pool, MaterializedView::TaxaTree)?;
+        refresh_materialized_view(&mut pool, MaterializedView::TaxaTreeStats)?;
+        refresh_materialized_view(&mut pool, MaterializedView::Species)?;
+
         Ok(())
     }
 }

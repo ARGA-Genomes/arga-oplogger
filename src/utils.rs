@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use arga_core::models::{TaxonomicRank, TaxonomicStatus};
 use chrono::{DateTime, Utc};
+use heck::ToTitleCase;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
 
@@ -29,6 +30,24 @@ pub fn new_progress_bar(total: usize, message: &str) -> ProgressBar {
         .with_style(style);
 
     bar
+}
+
+
+/// Convert the case of the first word to a title case.
+/// This will also replace all unicode whitespaces with ASCII compatible whitespace
+/// which means it also works as a sort of normalizer
+pub fn titleize_first_word(text: &str) -> String {
+    let mut converted: Vec<String> = Vec::new();
+    let mut words = text.split_whitespace();
+
+    if let Some(word) = words.next() {
+        converted.push(word.to_title_case());
+    }
+    for word in words {
+        converted.push(word.to_string());
+    }
+
+    converted.join(" ")
 }
 
 
@@ -190,13 +209,16 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
 
         "misapplied" => Ok(Misapplied),
         "misapplication" => Ok(Misapplied),
+        "unsourced misapplied" => Ok(Misapplied),
         "alternative name" => Ok(AlternativeName),
         "alternative representation" => Ok(AlternativeName),
 
         "pro parte misapplied" => Ok(ProParteMisapplied),
+        "unsourced pro parte misapplied" => Ok(ProParteMisapplied),
         "pro parte taxonomic synonym" => Ok(ProParteTaxonomicSynonym),
 
         "doubtful misapplied" => Ok(DoubtfulMisapplied),
+        "unsourced doubtful misapplied" => Ok(DoubtfulMisapplied),
         "doubtful taxonomic synonym" => Ok(DoubtfulTaxonomicSynonym),
         "doubtful pro parte misapplied" => Ok(DoubtfulProParteMisapplied),
         "doubtful pro parte taxonomic synonym" => Ok(DoubtfulProParteTaxonomicSynonym),

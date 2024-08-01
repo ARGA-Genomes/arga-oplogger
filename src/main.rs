@@ -133,7 +133,10 @@ fn main() -> Result<(), Error> {
         },
 
         Commands::Update(cmd) => match cmd {
-            UpdateCommand::Taxa => taxa::Taxa::update()?,
+            UpdateCommand::Taxa => {
+                taxa::Taxa::update()?;
+                taxa::Taxa::link()?;
+            }
             UpdateCommand::TaxonomicActs => taxonomic_acts::TaxonomicActs::update()?,
         },
     }
