@@ -1,5 +1,6 @@
 mod database;
 mod errors;
+mod names;
 mod operations;
 mod taxa;
 mod taxonomic_acts;

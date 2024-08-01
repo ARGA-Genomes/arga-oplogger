@@ -39,6 +39,10 @@ type TaxonFrame = DataFrame<TaxonAtom>;
 /// about what fields are mandatory and the format they should be in.
 #[derive(Debug, Clone, Deserialize)]
 struct Record {
+    /// Any value that uniquely identifies this record through its lifetime.
+    /// This is a kind of global permanent identifier
+    entity_id: String,
+
     /// The record id assigned by the dataset
     taxon_id: String,
     /// The scientific name of the parent taxon to link up in a tree
@@ -133,10 +137,11 @@ impl Taxa {
             // instead then we would combine and reduce changes from all systems which
             // is not desireable for our purposes
             let mut hasher = Xxh3::new();
-            hasher.update(record.taxon_id.as_bytes());
+            hasher.update(record.entity_id.as_bytes());
             let hash = hasher.digest();
 
             let mut frame = TaxonFrame::create(hash.to_string(), self.dataset_version_id, last_version);
+            frame.push(EntityId(record.entity_id));
             frame.push(TaxonId(record.taxon_id));
             frame.push(ScientificName(titleize_first_word(&record.scientific_name)));
             frame.push(CanonicalName(titleize_first_word(&record.canonical_name)));
@@ -284,9 +289,18 @@ impl Taxa {
         // linking up the records to the database ids based on a lookup
         let datasets = dataset_lookup(&mut pool)?;
 
+        let mut names = Vec::new();
         let mut records = Vec::new();
+
         for record in Self::reduce()? {
             let dataset_uuid = datasets.get(&record.dataset_id).expect("Cannot find dataset");
+
+            names.push(models::Name {
+                id: Uuid::new_v4(),
+                scientific_name: record.scientific_name.clone(),
+                canonical_name: record.canonical_name.clone(),
+                authorship: record.scientific_name_authorship.clone(),
+            });
 
             records.push(models::Taxon {
                 id: Uuid::new_v4(),
@@ -307,6 +321,12 @@ impl Taxa {
                 updated_at: chrono::Utc::now(),
             })
         }
+
+        // import all the names in case they don't already exist. we use names to
+        // hang data on including taxonomy and is a key method of data discovery
+        names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
+        names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
+        super::names::import(&names)?;
 
         // finally import the operations. if there is a conflict based on the operation_id
         // then it is a duplicate operation so do nothing with it
@@ -413,7 +433,7 @@ impl Taxa {
                 .do_nothing()
                 .execute(&mut conn)?;
 
-            bar.inc(1000);
+            bar.inc(10_000);
         }
         bar.finish();
 
@@ -453,6 +473,10 @@ impl From<Map<TaxonAtom>> for Taxon {
                 Citation(value) => taxon.citation = Some(value),
                 References(value) => taxon.references = Some(value),
                 LastUpdated(value) => taxon.last_updated = Some(value),
+
+                // we want this atom for provenance and reproduction with the hash
+                // generation but we don't need to actually use it
+                EntityId(_value) => {}
 
                 // fields currently not supported
                 AcceptedNameUsageId(_value) => {}

@@ -34,8 +34,9 @@ type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
 /// about what fields are mandatory and the format they should be in.
 #[derive(Debug, Clone, Deserialize)]
 struct Record {
-    /// The record id assigned by the dataset
-    taxon_id: String,
+    /// Any value that uniquely identifies this record through its lifetime.
+    /// This is a kind of global permanent identifier
+    entity_id: String,
 
     /// The name of the taxon. Should include author when possible
     scientific_name: String,
@@ -133,10 +134,11 @@ impl TaxonomicActs {
             // instead then we would combine and reduce changes from all systems which
             // is not desireable for our purposes
             let mut hasher = Xxh3::new();
-            hasher.update(record.taxon_id.as_bytes());
+            hasher.update(record.entity_id.as_bytes());
             let hash = hasher.digest();
 
             let mut frame = TaxonomicActFrame::create(hash.to_string(), self.dataset_version_id, last_version);
+            frame.push(EntityId(record.entity_id));
             frame.push(Taxon(record.scientific_name));
 
             if let Some(value) = act {
@@ -357,6 +359,10 @@ impl From<Map<TaxonomicActAtom>> for TaxonomicAct {
                 SourceUrl(value) => act.source_url = Some(value),
                 CreatedAt(value) => act.data_created_at = Some(value),
                 UpdatedAt(value) => act.data_updated_at = Some(value),
+
+                // we want this atom for provenance and reproduction with the hash
+                // generation but we don't need to actually use it
+                EntityId(_value) => {}
             }
         }
 
