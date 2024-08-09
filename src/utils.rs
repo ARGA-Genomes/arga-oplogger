@@ -148,6 +148,22 @@ pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
         "regio" => Ok(Regio),
         "special form" => Ok(SpecialForm),
 
+        "form" => Ok(Forma),
+        "subform" => Ok(Subforma),
+        "section zoology" => Ok(Section),
+        "subsection zoology" => Ok(Subsection),
+        "division zoology" => Ok(Division),
+        "section botany" => Ok(Sectio),
+        "subsection botany" => Ok(Subsectio),
+        "nothovariety" => Ok(Nothovarietas),
+        "forma specialis" => Ok(SpecialForm),
+        "pathovar" => Ok(Pathovar),
+        "serovar" => Ok(Serovar),
+        "biovar" => Ok(Biovar),
+        "species aggregate" => Ok(AggregateSpecies),
+        "infraspecific name" => Ok(Infraspecies),
+        "other" => Ok(Unranked),
+
         "" => Ok(Unranked),
 
         val => Err(ParseError::InvalidValue(val.to_string())),
@@ -163,6 +179,7 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
         "valid name" => Ok(Accepted),
         "accepted" => Ok(Accepted),
         "accepted name" => Ok(Accepted),
+        "provisionally accepted" => Ok(Accepted),
 
         "undescribed" => Ok(Undescribed),
         "species inquirenda" => Ok(SpeciesInquirenda),
@@ -180,6 +197,7 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
         "junior objective synonym" => Ok(Synonym),
         "junior subjective synonym" => Ok(Synonym),
         "later synonym" => Ok(Synonym),
+        "ambiguous synonym" => Ok(Synonym),
 
         "homonym" => Ok(Homonym),
         "junior homonym" => Ok(Homonym),
