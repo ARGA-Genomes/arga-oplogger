@@ -1,7 +1,10 @@
+mod collections;
 mod database;
 mod errors;
 mod names;
+mod nomenclatural_acts;
 mod operations;
+mod readers;
 mod taxa;
 mod taxonomic_acts;
 mod utils;
@@ -11,7 +14,6 @@ use std::path::PathBuf;
 use clap::Parser;
 use database::create_dataset_version;
 use errors::Error;
-
 
 /// The ARGA operation logger
 #[derive(Parser)]
@@ -61,6 +63,30 @@ pub enum ImportCommand {
         /// The path to the CSV file to import as operation logs
         path: PathBuf,
     },
+
+    /// Import nomenclatural acts from a CSV dataset
+    NomenclaturalActs {
+        /// The global identifier describing the dataset
+        dataset_id: String,
+        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
+        version: String,
+        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
+        created_at: String,
+        /// The path to the CSV file to import as operation logs
+        path: PathBuf,
+    },
+
+    /// Import collections from a CSV dataset
+    Collections {
+        /// The global identifier describing the dataset
+        dataset_id: String,
+        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
+        version: String,
+        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
+        created_at: String,
+        /// The path to the CSV file to import as operation logs
+        path: PathBuf,
+    },
 }
 
 #[derive(clap::Subcommand)]
@@ -77,8 +103,9 @@ pub enum UpdateCommand {
     Taxa,
     /// Update taxonomic acts with the reduced logs
     TaxonomicActs,
+    /// Update nomenclatural acts with the reduced logs
+    NomenclaturalActs,
 }
-
 
 fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
@@ -115,6 +142,34 @@ fn main() -> Result<(), Error> {
                 };
                 taxa.import()?
             }
+
+            ImportCommand::NomenclaturalActs {
+                dataset_id,
+                version,
+                created_at,
+                path,
+            } => {
+                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+                let acts = nomenclatural_acts::NomenclaturalActs {
+                    path: path.clone(),
+                    dataset_version_id: dataset_version.id,
+                };
+                acts.import()?
+            }
+
+            ImportCommand::Collections {
+                dataset_id,
+                version,
+                created_at,
+                path,
+            } => {
+                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+                let collections = collections::Collections {
+                    path: path.clone(),
+                    dataset_version_id: dataset_version.id,
+                };
+                collections.import()?
+            }
         },
         Commands::Reduce(cmd) => match cmd {
             ReduceCommand::Taxa => {
@@ -139,6 +194,7 @@ fn main() -> Result<(), Error> {
                 taxa::Taxa::link()?;
             }
             UpdateCommand::TaxonomicActs => taxonomic_acts::TaxonomicActs::update()?,
+            UpdateCommand::NomenclaturalActs => nomenclatural_acts::NomenclaturalActs::update()?,
         },
     }
 

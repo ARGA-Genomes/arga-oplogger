@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use arga_core::models::{TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{NomenclaturalActType, TaxonomicRank, TaxonomicStatus};
 use chrono::{DateTime, Utc};
 use heck::ToTitleCase;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -8,10 +8,8 @@ use serde::Deserialize;
 
 use crate::errors::ParseError;
 
-
 pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
 pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
-
 
 pub fn new_spinner(message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
@@ -25,13 +23,12 @@ pub fn new_spinner(message: &str) -> ProgressBar {
 
 pub fn new_progress_bar(total: usize, message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(PROGRESS_TEMPLATE).expect("Invalid progress bar template");
-    let bar = ProgressBar::new(total as u64)
+    
+
+    ProgressBar::new(total as u64)
         .with_message(message.to_string())
-        .with_style(style);
-
-    bar
+        .with_style(style)
 }
-
 
 /// Convert the case of the first word to a title case.
 /// This will also replace all unicode whitespaces with ASCII compatible whitespace
@@ -50,7 +47,6 @@ pub fn titleize_first_word(text: &str) -> String {
     converted.join(" ")
 }
 
-
 pub fn taxonomic_rank_from_str<'de, D>(deserializer: D) -> Result<TaxonomicRank, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -67,6 +63,13 @@ where
     str_to_taxonomic_status(&s).map_err(serde::de::Error::custom)
 }
 
+pub fn nomenclatural_act_from_str<'de, D>(deserializer: D) -> Result<NomenclaturalActType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    str_to_nomenclatural_act(&s).map_err(serde::de::Error::custom)
+}
 
 pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
     use TaxonomicRank::*;
@@ -170,7 +173,6 @@ pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
     }
 }
 
-
 pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseError> {
     use TaxonomicStatus::*;
 
@@ -254,6 +256,23 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
     }
 }
 
+pub fn str_to_nomenclatural_act(value: &str) -> Result<NomenclaturalActType, ParseError> {
+    use NomenclaturalActType::*;
+
+    match value.to_lowercase().as_str() {
+        "species_nova" => Ok(SpeciesNova),
+        "subspecies_nova" => Ok(SubspeciesNova),
+        "genus_species_nova" => Ok(GenusSpeciesNova),
+        "combinatio_nova" => Ok(CombinatioNova),
+        "revived_status" => Ok(RevivedStatus),
+        "name_usage" => Ok(NameUsage),
+        "new_species" => Ok(SpeciesNova),
+        "genus_transfer" => Ok(CombinatioNova),
+        "subgenus_placement" => Ok(CombinatioNova),
+
+        val => Err(ParseError::InvalidValue(val.to_string())),
+    }
+}
 
 pub fn parse_date_time(value: &str) -> Result<DateTime<Utc>, ParseError> {
     if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%z") {

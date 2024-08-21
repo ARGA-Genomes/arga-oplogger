@@ -13,26 +13,15 @@ use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::database::{
-    dataset_lookup,
-    get_pool,
-    name_lookup,
-    refresh_materialized_view,
-    taxon_lookup,
-    MaterializedView,
+    dataset_lookup, get_pool, name_lookup, refresh_materialized_view, taxon_lookup, MaterializedView,
 };
 use crate::errors::Error;
 use crate::operations::{group_operations, merge_operations};
 use crate::utils::{
-    new_progress_bar,
-    new_spinner,
-    taxonomic_rank_from_str,
-    taxonomic_status_from_str,
-    titleize_first_word,
+    new_progress_bar, new_spinner, taxonomic_rank_from_str, taxonomic_status_from_str, titleize_first_word,
 };
 
-
 type TaxonFrame = DataFrame<TaxonAtom>;
-
 
 /// The CSV record to decompose into operation logs.
 /// This is deserializeable with the serde crate and enforces expectations
@@ -71,7 +60,6 @@ struct Record {
     last_updated: Option<String>,
 }
 
-
 /// The ARGA taxon CSV record output
 /// This is the record in a CSV after reducing the taxa logs
 /// from multiple datasets.
@@ -104,7 +92,6 @@ pub struct Taxon {
     references: Option<String>,
     last_updated: Option<String>,
 }
-
 
 pub struct Taxa {
     pub path: PathBuf,
@@ -200,7 +187,6 @@ impl Taxa {
         let records = merge_operations(existing, records)?;
         spinner.finish();
 
-
         let mut total_imported = 0;
         let bar = new_progress_bar(records.len(), "Importing taxon operations");
 
@@ -256,7 +242,7 @@ impl Taxa {
             // allow for multiple taxonomic systems
             let mut taxon = Taxon::from(map);
             if let Some(op) = ops.first() {
-                taxon.dataset_id = op.dataset.global_id.clone();
+                taxon.dataset_id.clone_from(&op.dataset.global_id);
                 taxa.push(taxon);
             }
         }
@@ -304,7 +290,7 @@ impl Taxa {
 
             records.push(models::Taxon {
                 id: Uuid::new_v4(),
-                dataset_id: dataset_uuid.clone(),
+                dataset_id: *dataset_uuid,
                 parent_id: None,
                 entity_id: Some(record.entity_id),
                 status: record.taxonomic_status,
@@ -383,17 +369,17 @@ impl Taxa {
 
         for record in Self::reduce()? {
             if let Some(dataset_uuid) = datasets.get(&record.dataset_id) {
-                let taxon_lookup = (dataset_uuid.clone(), record.scientific_name.clone());
+                let taxon_lookup = (*dataset_uuid, record.scientific_name.clone());
                 if let Some(taxon_uuid) = all_taxa.get(&taxon_lookup) {
                     // add a name link if the name can be found in the database
                     if let Some(name_uuid) = names.get(&record.scientific_name) {
-                        name_links.push((taxon_uuid.clone(), name_uuid.clone()));
+                        name_links.push((*taxon_uuid, *name_uuid));
                     }
 
                     // add a parent link if the taxon can be found in the database
                     if let Some(parent) = record.parent_taxon {
                         if let Some(parent_uuid) = all_taxa.get(&(*dataset_uuid, parent)) {
-                            links.push((taxon_uuid.clone(), parent_uuid.clone()));
+                            links.push((*taxon_uuid, *parent_uuid));
                         }
                     }
                 }
@@ -447,7 +433,6 @@ impl Taxa {
         Ok(())
     }
 }
-
 
 /// Converts a LWW CRDT map of taxon atoms to a Taxon record for serialisation
 impl From<Map<TaxonAtom>> for Taxon {
