@@ -1,0 +1,86 @@
+#+title:  The design and architecture of ARGA's CmRDT provenance system
+#+author: Goran Sterjov
+#+date:   2024-08-21
+
+* Intro
+CRDT stands for conflict-free replicated data type. In essence they are data types that leverage set theory in mathematics to ensure that changes to a specific set of data on different systems at different times can always be merged without conflicts.
+The CRDT we are using is inspired by the Replicated Object Notation. The key element is the [[https://cse.buffalo.edu/tech-reports/2014-04.pdf][Hybrid Logical Clock]] which ultimately provides a universal timestamp with a logical clock component to maintain order of operations within a limited timestamp precision. For now the last write wins (LWW) conflict policy is used when merging states but many potential variants are possible such as LWW + priority weights.
+
+* Status
+CRDTs are used in the wild in a number of tech, predominately in state/database replication across nodes. It is an active field of research with particular focus placed on realtime concurrent text editing.
+
+* Goal
+Our goal is to use CRDTs as a way to represent replicated data from multiple data sources. More often than not a full set will be available and CRDTs will be used to manage the merging of data across versions of the same data as well as the same data from other sets. The benefit of multiple edit nodes and realtime synchronization is a non-goal for us, instead the properties of eventual consistency is leveraged in re-importing versioned datasets which in a way mimicks network splits and the resulting operations taken to make a dataset consistent again.
+
+* Why
+The foremost reason is to enable provenance by having a record of every change to every field. In addition to change tracking we also gain the ability to recreate the ARGA index from any point in time, effectively snapshotting all our data for permalinks. Lastly, this makes it much easier to reason about aggregated data as the history of operations that go into a reduced record is laid bare and the source of any data errors is easily identifiable. In particular this allows us to keep the datasets in their original form without modifying it while /layering/ fixes on top, making the attribution of those fixes clear.
+
+* How
+Much like RON the underlying data used by our CRDTs is an operation log (also knowns as CmRDT). This means that every change is represented as an "operation" to be carried out against a specific entity. For example, the following is an operation log line broken down into its constituent parts:
+
+#+begin_example
+id,  entity, parent, dataset_version, action, atom
+100, 100abc,  99,    1a2b...,         create, {}
+101, 100abc, 100,    1a2b...,         update, { "ScientificName": "Felis catus Linnaeus, 1758" }
+102, 100abc, 101,    1a2b...,         update, { "CanonicalName": "Felis catus" }
+#+end_example
+
+- *operation_id* is the universally unique identifier for a specific operation log. This is a 64bit integer and represents the hybrid logical clock value. When ordered they go from first operation created to the last operation created.
+- *entity* is a hash derived from a unique and permanent property of the data and allows a reducer to collect all operations for a specific record. There will always be a single *create* action for every entity.
+- *parent* must always refer to the last operation in the log that the node is aware of. This allows us to determine causality and take more sophisticated actions when reducing an entity to smooth over inconsistencies caused by a network split.
+- *action* is the action to take on the entity. For the time being all entities are simple maps so the actions amount to /create/, /update/ and /delete/.
+- *atoms* is a JSONB value of atomic types that the reducer uses to build something. For now it'll always be a single key object with the field name as the key and the value as any type that the PostgreSQL JSONB implementation supports.
+
+* Network splits and merges
+For the purposes of ARGA it's helpful to see different datasets as being the same database with an ongoing network split. This helps frame the merging process of datasets as a synchronization problem which is a furtile field of research and development.
+
+A key benefit of using a CmRDT is that two nodes can disconnect and carry on modifying its local operation log with the goal of becoming eventually consistent by merging with each others operation logs.
+For example, say we have two nodes named *src* and *cloud*. When the connection between the *src* and *cloud* is severed they both have the following log for an object (the operation_id has been changed to a readable time component to better describe it's timestamp nature)
+#+begin_example
+1030-0  100abc  0900-0  src-2023  create {}
+1030-1  100abc  1030-0  src-2023  update { "ScientificName", "Felis catus" }
+1030-2  100abc  1030-1  src-2023  update { "CannonicalName", "Felis catus" }
+#+end_example
+
+Ten minutes later the *src* node then makes a change to the scientific name leaving it's local copy as:
+#+begin_example
+1030-0  100abc  0900-0  src-2023  create {}
+1030-1  100abc  1030-0  src-2023  update { "ScientificName", "Felis catus" }
+1030-2  100abc  1030-1  src-2023  update { "CannonicalName", "Felis catus" }
+1040-0  100abc  1030-2  src-2023  update { "ScientificName", "Felis catus L. 1758" }
+#+end_example
+
+When reducing the record on the *src* node this would result in /Felis catus L. 1758/ since it's the last operation applied to the map.
+
+5 minutes after that the *cloud* node makes a change to the same field and ends up with a local copy that looks like:
+#+begin_example
+1030-0  100abc  0900-0  src-2023    create {}
+1030-1  100abc  1030-0  src-2023    update { "ScientificName", "Felis catus" }
+1030-2  100abc  1030-1  src-2023    update { "CannonicalName", "Felis catus" }
+1045-0  100abc  1030-2  cloud-2024  update { "ScientificName", "Felis catus Linnaeus, 1758" }
+#+end_example
+
+When reducing the record on the *cloud* node this would result in /Felis catus Linnaeus, 1758/.
+
+Some time passes and the connection between *src* and *cloud* is finally restored and the operation logs between the two can finally be merged and consistent again. On both nodes we end up with:
+#+begin_example
+1030-0  100abc  0900-0  src-2023    create {}
+1030-1  100abc  1030-0  src-2023    update { "ScientificName", "Felis catus" }
+1030-2  100abc  1030-1  src-2023    update { "CannonicalName", "Felis catus" }
+1040-0  100abc  1030-2  src-2023    update { "ScientificName", "Felis catus L. 1758" }
+1045-0  100abc  1030-2  cloud-2024  update { "ScientificName", "Felis catus Linnaeus, 1758" }
+#+end_example
+
+The final reduced record for both nodes after the split depends on the /reducer/. When using the last-write-wins reducer we end up with /Felis catus Linnaeus, 1758/ since the last write was *1045-0*.
+
+As can be seen in the merged log the merged operations ultimately reference the same operation *1030-2*. This lets us identify a conflict that occurred during a split and lets us rebuild the last known consistent state. The LWW policy is one of many possible reducer policies and tracking causality enables an even wider range of potential policy implementations.
+
+For ARGA's CmRDT implementation both *src* and *cloud* can be seen as different datasets for the same topic, such as taxonomy. Because these datasets won't be using operation logs we can't rely on the universally unique and immutable properties of the /operation_id/ because the operation_id will need to be recreated from the full state of the dataset for each import. For this reason ARGA deviates and encodes immutable and unique values from the dataset into the /entity_id/ which then allows us to deduplicate and merge data from multiple datasets in much the same way while building our own operation log for wider use.
+
+
+
+* References
+- [[https://replicated.cc/][Replicated Object Notation]]
+  Also includes RON Data Types (RDT) that describes various CRDTs through the lens of RON ops
+- [[https://cse.buffalo.edu/tech-reports/2014-04.pdf][Logical Physical Clocks and Consistent Snapshots in Globally Distributed Databases]]
+  A different kind of logical clock with a different level of precision
