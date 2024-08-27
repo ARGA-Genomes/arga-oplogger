@@ -5,13 +5,16 @@ use arga_core::schema;
 use chrono::{DateTime, Utc};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::*;
+use r2d2::PooledConnection;
 use tracing::info;
 use uuid::Uuid;
 
 use crate::errors::Error;
+use crate::readers::OperationLoader;
 use crate::utils::new_spinner;
 
-type PgPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgConn = PooledConnection<ConnectionManager<PgConnection>>;
 
 /// A String map. The value is a Uuid associated with the string. For example, a
 /// name of a dataset stored in this map will return the dataset id when queried.
@@ -167,4 +170,15 @@ pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
 
     info!(total = map.len(), "Creating name publication map finished");
     Ok(map)
+}
+
+
+pub struct FrameLoader {
+    pub pool: PgPool,
+}
+
+impl FrameLoader {
+    pub fn new(pool: PgPool) -> FrameLoader {
+        FrameLoader { pool }
+    }
 }

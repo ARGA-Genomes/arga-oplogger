@@ -13,15 +13,57 @@ use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::database::{
-    dataset_lookup, get_pool, name_lookup, refresh_materialized_view, taxon_lookup, MaterializedView,
+    dataset_lookup,
+    get_pool,
+    name_lookup,
+    refresh_materialized_view,
+    taxon_lookup,
+    FrameLoader,
+    MaterializedView,
+    PgConn,
 };
 use crate::errors::Error;
-use crate::operations::{group_operations, merge_operations};
+use crate::operations::{distinct_changes, group_operations, merge_operations, Operations};
+use crate::readers::csv::{CsvReader, IntoFrame, TryIntoFrame};
+use crate::readers::OperationLoader;
 use crate::utils::{
-    new_progress_bar, new_spinner, taxonomic_rank_from_str, taxonomic_status_from_str, titleize_first_word,
+    new_progress_bar,
+    new_spinner,
+    taxonomic_rank_from_str,
+    taxonomic_status_from_str,
+    titleize_first_word,
 };
 
 type TaxonFrame = DataFrame<TaxonAtom>;
+
+
+// impl OperationLoader for TaxonOperation {
+//     fn load_operations(conn: &mut PgConn, entity_ids: &[String]) -> Result<Vec<TaxonOperation>, Error> {
+//         use schema::taxa_logs::dsl::*;
+//         let ops = taxa_logs
+//             .filter(entity_id.eq_any(entity_ids))
+//             .order(operation_id.asc())
+//             .load::<TaxonOperation>(conn)?;
+//         Ok(ops)
+//     }
+// }
+
+impl OperationLoader for FrameLoader {
+    type Operation = TaxonOperation;
+
+    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonOperation>, Error> {
+        use schema::taxa_logs::dsl::*;
+        let mut conn = self.pool.get()?;
+
+        let ops = taxa_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order(operation_id.asc())
+            .load::<TaxonOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+}
+
 
 /// The CSV record to decompose into operation logs.
 /// This is deserializeable with the serde crate and enforces expectations
@@ -60,6 +102,47 @@ struct Record {
     last_updated: Option<String>,
 }
 
+impl IntoFrame for Record {
+    type Atom = TaxonAtom;
+
+    fn entity_hashable(&self) -> &[u8] {
+        // because arga supports multiple taxonomic systems we use the entity_id
+        // field which should be salted with a unique dataset_id to ensure that
+        // matching scientific names remain unqiue within the dataset only
+        self.entity_id.as_bytes()
+    }
+
+    fn into_frame(self, mut frame: TaxonFrame) -> TaxonFrame {
+        use TaxonAtom::*;
+        frame.push(EntityId(self.entity_id));
+        frame.push(TaxonId(self.taxon_id));
+        frame.push(ScientificName(titleize_first_word(&self.scientific_name)));
+        frame.push(CanonicalName(titleize_first_word(&self.canonical_name)));
+        frame.push(TaxonomicRank(self.taxon_rank));
+        frame.push(TaxonomicStatus(self.taxonomic_status));
+        frame.push(NomenclaturalCode(self.nomenclatural_code));
+
+        if let Some(value) = self.parent_taxon {
+            frame.push(ParentTaxon(titleize_first_word(&value)));
+        }
+        if let Some(value) = self.scientific_name_authorship {
+            frame.push(Authorship(value));
+        }
+        if let Some(value) = self.citation {
+            frame.push(Citation(value));
+        }
+        if let Some(value) = self.references {
+            frame.push(References(value));
+        }
+        if let Some(value) = self.last_updated {
+            frame.push(LastUpdated(value));
+        }
+
+        frame
+    }
+}
+
+
 /// The ARGA taxon CSV record output
 /// This is the record in a CSV after reducing the taxa logs
 /// from multiple datasets.
@@ -92,6 +175,7 @@ pub struct Taxon {
     references: Option<String>,
     last_updated: Option<String>,
 }
+
 
 pub struct Taxa {
     pub path: PathBuf,
@@ -165,45 +249,85 @@ impl Taxa {
     /// and then insert them into the database, effectively updating taxa_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        use schema::taxa_logs::dsl::*;
+        // use schema::taxa_logs::dsl::*;
 
         let pool = get_pool()?;
-        let mut conn = pool.get()?;
+        // let mut conn = pool.get()?;
+        let reader: CsvReader<Record> = CsvReader::from_path(self.path.clone(), self.dataset_version_id)?;
 
-        // load the existing operations. this can be quite large it includes
-        // all operations ever, and is a grow-only table.
-        // a future memory optimised operation could instead group by entity id
-        // first and then query large chunks of logs in parallel
-        let spinner = new_spinner("Loading existing taxon operations");
-        let existing = taxa_logs.order(operation_id.asc()).load::<TaxonOperation>(&mut conn)?;
-        spinner.finish();
+        let loader2 = FrameLoader::new(pool.clone());
+        let loader = FrameLoader::new(pool);
+        let operations = Operations::new(reader, loader2);
 
-        // parse and decompose the input file into taxon operations
-        let records = self.taxa()?;
-
-        // merge the new operations with the existing ones in the database
-        // to deduplicate all ops
-        let spinner = new_spinner("Merging existing and new operations");
-        let records = merge_operations(existing, records)?;
-        spinner.finish();
-
-        let mut total_imported = 0;
-        let bar = new_progress_bar(records.len(), "Importing taxon operations");
-
-        // finally import the operations. if there is a conflict based on the operation_id
-        // then it is a duplicate operation so do nothing with it
-        for chunk in records.chunks(1000) {
-            let inserted = diesel::insert_into(taxa_logs)
-                .values(chunk)
-                .on_conflict_do_nothing()
-                .execute(&mut conn)?;
-
-            total_imported += inserted;
-            bar.inc(1000);
+        for chunk in operations.chunks(2000) {
+            let mut new_ops = Vec::new();
+            for frame in chunk {
+                let ops: Vec<TaxonOperation> = frame?.operations.into_iter().map(|o| o.into()).collect();
+                new_ops.extend(ops);
+            }
+            let changes = distinct_changes(new_ops, &loader)?;
+            println!("{:#?}", changes);
         }
 
-        bar.finish();
-        info!(total = records.len(), total_imported, "Taxa operations import finished");
+        // for chunk in operations.distinct_chunks(50) {
+        //     println!("{:#?}", chunk);
+        // }
+        // operations.load_operations()?;
+
+        // let progress = new_progress_bar(reader.total_rows, "Converting and importing");
+        // progress.enable_steady_tick(Duration::from_millis(100));
+
+
+        // the reader converts a row into a frame and the iterator actually returns a
+        // chunk of frames so we parallelize each chunk to make the database insert
+        // a lot quicker
+        // reader.into_iter().par_bridge().try_for_each_with(pool, |pool, chunk| {
+        //     // we want to get grab a connection from the pool for every thread that
+        //     // rayon schedules on because the connection is not Send/Sync
+        //     let mut conn = pool.get()?;
+        //     let total_rows = chunk.len();
+
+        //     // bail if we run into an error
+        //     let mut records = Vec::with_capacity(chunk.len());
+        //     for record in chunk {
+        //         records.push(record?)
+        //     }
+
+        //     // grab all the entity ids in the chunk because we need to check for existing
+        //     // operations in the database for the operation merge
+        //     let entity_ids: Vec<&String> = records.iter().map(|r| &r.entity_id).collect();
+
+        //     // grab all relevant existing operation logs for merging
+        //     let existing = taxa_logs
+        //         .filter(entity_id.eq_any(entity_ids))
+        //         .order(operation_id.asc())
+        //         .load::<TaxonOperation>(&mut conn)?;
+
+        //     // convert our newly parsed operations into a TaxonOperation
+        //     let mut new_ops = Vec::new();
+        //     for record in records {
+        //         let ops: Vec<TaxonOperation> = record.operations.into_iter().map(|o| o.into()).collect();
+        //         new_ops.extend(ops);
+        //     }
+
+        //     // merge the new operations with the existing ones in the database
+        //     // to deduplicate all ops
+        //     let ops = merge_operations(existing, new_ops)?;
+
+        //     // finally import the operations. if there is a conflict based on the operation atom
+        //     // then it is a duplicate operation so do nothing with it
+        //     let inserted = diesel::insert_into(taxa_logs)
+        //         .values(&ops)
+        //         .on_conflict_do_nothing()
+        //         .execute(&mut conn)?;
+
+        //     progress.inc(total_rows as u64);
+        //     progress.set_message(format!("inserted: {inserted}"));
+
+        //     Ok::<(), Error>(())
+        // })?;
+
+        info!("Taxa operations import finished");
         Ok(())
     }
 
@@ -228,7 +352,7 @@ impl Taxa {
         spinner.finish();
 
         let spinner = new_spinner("Grouping taxa logs");
-        let entities = group_operations(ops, vec![])?;
+        let entities = group_operations(ops, vec![]);
         spinner.finish();
 
         let mut taxa = Vec::new();

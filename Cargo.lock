@@ -113,7 +113,6 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 [[package]]
 name = "arga-core"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#91733b9ca7275b6d5e1eda659f17bd1e95398203"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -972,6 +971,7 @@ name = "oplogger"
 version = "0.1.0"
 dependencies = [
  "arga-core",
+ "bigdecimal",
  "chrono",
  "clap 4.5.16",
  "csv",

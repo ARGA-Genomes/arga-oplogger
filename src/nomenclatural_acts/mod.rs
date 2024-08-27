@@ -154,7 +154,7 @@ impl NomenclaturalActs {
         // merge the new operations with the existing ones in the database
         // to deduplicate all ops
         let spinner = new_spinner("Merging existing and new operations");
-        let records = merge_operations(existing, records)?;
+        let records = merge_operations(existing, records);
         spinner.finish();
 
         let mut total_imported = 0;
@@ -197,7 +197,7 @@ impl NomenclaturalActs {
         spinner.finish();
 
         let spinner = new_spinner("Grouping nomenclatural act logs");
-        let entities = group_operations(ops, vec![])?;
+        let entities = group_operations(ops, vec![]);
         spinner.finish();
 
         let mut records = Vec::new();

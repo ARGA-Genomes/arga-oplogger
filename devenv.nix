@@ -11,7 +11,6 @@
     toolchain = {
       rustfmt = inputs.fenix.packages.${pkgs.system}.latest.rustfmt;
     };
-    channel = "stable";
   };
 
   pre-commit.hooks = {
