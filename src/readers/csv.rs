@@ -19,8 +19,15 @@ pub trait IntoFrame {
 pub trait TryIntoFrame {
     type Atom;
     type Error;
-    fn try_into_frame(self) -> Result<DataFrame<Self::Atom>, Self::Error>;
 }
+
+// Used by functions that take a generic reader that also has to handle
+// a iterator that returns fallable results
+impl<Atom, E> TryIntoFrame for Result<DataFrame<Atom>, E> {
+    type Atom = Atom;
+    type Error = E;
+}
+
 
 pub trait FrameReader {
     type Atom;
@@ -106,51 +113,5 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_frame()
-    }
-}
-
-
-// impl<R> IntoIterator for CsvReader<R>
-// where
-//     R: DeserializeOwned + IntoFrame,
-//     R::Atom: Default,
-// {
-//     type IntoIter = CsvReaderIntoIterator<R>;
-//     type Item = Result<DataFrame<R::Atom>, Error>;
-
-//     fn into_iter(self) -> Self::IntoIter {
-//         CsvReaderIntoIterator { reader: self }
-//     }
-// }
-
-// pub struct CsvReaderIntoIterator<R> {
-//     reader: CsvReader<R>,
-// }
-
-// impl<R> Iterator for CsvReaderIntoIterator<R>
-// where
-//     R: DeserializeOwned + IntoFrame,
-//     R::Atom: Default,
-// {
-//     type Item = Result<DataFrame<R::Atom>, Error>;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.reader.next_frame()
-//         // self.reader.next_frame_chunk()
-//     }
-// }
-
-
-// Used by functions that take a generic reader that also has to handle
-// a iterator that returns fallable results
-impl<Atom, E> TryIntoFrame for Result<DataFrame<Atom>, E> {
-    type Atom = Atom;
-    type Error = E;
-
-    fn try_into_frame(self) -> Result<DataFrame<Self::Atom>, Self::Error> {
-        match self {
-            Ok(frame) => Ok(frame),
-            Err(err) => Err(err),
-        }
     }
 }

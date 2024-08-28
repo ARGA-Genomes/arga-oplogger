@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use arga_core::models::DatasetVersion;
 use arga_core::schema;
@@ -10,7 +11,6 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::errors::Error;
-use crate::readers::OperationLoader;
 use crate::utils::new_spinner;
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
@@ -48,7 +48,10 @@ impl std::fmt::Display for MaterializedView {
 pub fn get_pool() -> Result<PgPool, Error> {
     let url = arga_core::get_database_url();
     let manager = ConnectionManager::<PgConnection>::new(url);
-    let pool = Pool::builder().build(manager)?;
+    let pool = Pool::builder()
+        .connection_timeout(Duration::from_secs(1))
+        .max_size(30)
+        .build(manager)?;
     Ok(pool)
 }
 
@@ -173,6 +176,7 @@ pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
 }
 
 
+#[derive(Clone)]
 pub struct FrameLoader {
     pub pool: PgPool,
 }

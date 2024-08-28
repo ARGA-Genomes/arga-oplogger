@@ -3,13 +3,14 @@ use std::time::Duration;
 use arga_core::models::{NomenclaturalActType, TaxonomicRank, TaxonomicStatus};
 use chrono::{DateTime, Utc};
 use heck::ToTitleCase;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::Deserialize;
 
 use crate::errors::ParseError;
 
 pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
 pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
+pub static SPINNER_TOTALS_TEMPLATE: &str = "{spinner:2.cyan/blue} {msg}: {human_pos}";
 
 pub fn new_spinner(message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
@@ -23,12 +24,54 @@ pub fn new_spinner(message: &str) -> ProgressBar {
 
 pub fn new_progress_bar(total: usize, message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(PROGRESS_TEMPLATE).expect("Invalid progress bar template");
-    
-
     ProgressBar::new(total as u64)
         .with_message(message.to_string())
         .with_style(style)
 }
+
+pub fn new_spinner_totals(message: &str) -> ProgressBar {
+    let style = ProgressStyle::with_template(SPINNER_TOTALS_TEMPLATE).expect("Invalid spinner template");
+    let spinner = ProgressBar::new_spinner()
+        .with_message(message.to_string())
+        .with_style(style);
+
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner
+}
+
+
+pub struct FrameImportBars {
+    bars: MultiProgress,
+    pub total: ProgressBar,
+    pub operations: ProgressBar,
+    pub inserted: ProgressBar,
+}
+
+impl FrameImportBars {
+    pub fn new(total: usize) -> FrameImportBars {
+        let bars = MultiProgress::new();
+        let total = new_progress_bar(total, "Importing frames");
+        let operations = new_spinner_totals("Total operations");
+        let inserted = new_spinner_totals("Operations inserted");
+        bars.add(total.clone());
+        bars.add(operations.clone());
+        bars.add(inserted.clone());
+
+        FrameImportBars {
+            bars,
+            total,
+            operations,
+            inserted,
+        }
+    }
+
+    pub fn finish(&self) {
+        self.total.finish();
+        self.operations.finish();
+        self.inserted.finish();
+    }
+}
+
 
 /// Convert the case of the first word to a title case.
 /// This will also replace all unicode whitespaces with ASCII compatible whitespace
