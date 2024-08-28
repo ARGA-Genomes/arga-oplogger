@@ -191,16 +191,20 @@ impl Taxa {
     /// and then insert them into the database, effectively updating taxa_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        let pool = get_pool()?;
+        // we need a few components to fully import operation logs. the first is a CSV file reader
+        // which parses each row and converts it into a frame. the second is a framer which allows
+        // us to conveniently get chunks of frames from the reader and sets us up for easy parallelization.
+        // and the third is the frame loader which allows us to query the database to deduplicate and
+        // pull out unique operations, as well as upsert the new operations.
         let reader: CsvReader<Record> = CsvReader::from_path(self.path.clone(), self.dataset_version_id)?;
-
         let bars = FrameImportBars::new(reader.total_rows);
-        let loader = FrameLoader::new(pool.clone());
         let framer = Framer::new(reader);
+        let loader = FrameLoader::new(get_pool()?);
 
         // parse and convert big chunks of rows. this is an IO bound task but for each
-        // chunk we need to query the database and then insert into the database, so instead
-        // we parallelize the frame merging and inserting instead
+        // chunk we need to query the database and then insert into the database, so
+        // we parallelize the frame merging and inserting instead since it is an order of
+        // magnitude slower than the parsing
         for frames in framer.chunks(20_000) {
             let total_frames = frames.len();
 
@@ -210,11 +214,8 @@ impl Taxa {
             frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
                 let total = slice.len();
 
-                // compare the ops with previously imported ops and only return
-                // actual changes that will occur
+                // compare the ops with previously imported ops and only return actual changes
                 let changes = distinct_changes(slice.to_vec(), &loader)?;
-
-                // finally import the operations
                 let inserted = loader.upsert_operations(&changes)?;
 
                 bars.inserted.inc(inserted as u64);
