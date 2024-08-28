@@ -1,12 +1,8 @@
-// mod collections;
 mod database;
 mod errors;
-mod names;
-mod nomenclatural_acts;
+mod loggers;
 mod operations;
 mod readers;
-mod taxa;
-mod taxonomic_acts;
 mod utils;
 
 use std::path::PathBuf;
@@ -14,6 +10,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use database::create_dataset_version;
 use errors::Error;
+use loggers::*;
 
 /// The ARGA operation logger
 #[derive(Parser)]
@@ -122,7 +119,7 @@ fn main() -> Result<(), Error> {
                 path,
             } => {
                 let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
-                let taxa = taxa::Taxa {
+                let taxa = Taxa {
                     path: path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
@@ -136,7 +133,7 @@ fn main() -> Result<(), Error> {
                 path,
             } => {
                 let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
-                let taxa = taxonomic_acts::TaxonomicActs {
+                let taxa = TaxonomicActs {
                     path: path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
@@ -150,7 +147,7 @@ fn main() -> Result<(), Error> {
                 path,
             } => {
                 let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
-                let acts = nomenclatural_acts::NomenclaturalActs {
+                let acts = NomenclaturalActs {
                     path: path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
@@ -173,14 +170,14 @@ fn main() -> Result<(), Error> {
         },
         Commands::Reduce(cmd) => match cmd {
             ReduceCommand::Taxa => {
-                let records = taxa::Taxa::reduce()?;
+                let records = Taxa::reduce()?;
                 let mut writer = csv::Writer::from_writer(std::io::stdout());
                 for record in records {
                     writer.serialize(record)?;
                 }
             }
             ReduceCommand::TaxonomicActs => {
-                let records = taxonomic_acts::TaxonomicActs::reduce()?;
+                let records = TaxonomicActs::reduce()?;
                 let mut writer = csv::Writer::from_writer(std::io::stdout());
                 for record in records {
                     writer.serialize(record)?;
@@ -190,11 +187,11 @@ fn main() -> Result<(), Error> {
 
         Commands::Update(cmd) => match cmd {
             UpdateCommand::Taxa => {
-                taxa::Taxa::update()?;
-                taxa::Taxa::link()?;
+                Taxa::update()?;
+                Taxa::link()?;
             }
-            UpdateCommand::TaxonomicActs => taxonomic_acts::TaxonomicActs::update()?,
-            UpdateCommand::NomenclaturalActs => nomenclatural_acts::NomenclaturalActs::update()?,
+            UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,
+            UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
         },
     }
 
