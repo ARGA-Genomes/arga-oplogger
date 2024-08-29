@@ -12,6 +12,17 @@ pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {hu
 pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
 pub static SPINNER_TOTALS_TEMPLATE: &str = "{spinner:2.cyan/blue} {msg}: {human_pos}";
 
+
+#[macro_export]
+macro_rules! frame_push_opt {
+    ($frame:ident, $discriminant:ident, $field:expr) => {
+        if let Some(value) = $field {
+            $frame.push($discriminant(value));
+        }
+    };
+}
+
+
 pub fn new_spinner(message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
     let spinner = ProgressBar::new_spinner()

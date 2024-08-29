@@ -84,6 +84,18 @@ pub enum ImportCommand {
         /// The path to the CSV file to import as operation logs
         path: PathBuf,
     },
+
+    /// Import sequences from a CSV dataset
+    Sequences {
+        /// The global identifier describing the dataset
+        dataset_id: String,
+        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
+        version: String,
+        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
+        created_at: String,
+        /// The path to the CSV file to import as operation logs
+        path: PathBuf,
+    },
 }
 
 #[derive(clap::Subcommand)]
@@ -161,11 +173,25 @@ fn main() -> Result<(), Error> {
                 path,
             } => {
                 let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
-                // let collections = collections::Collections {
+                // let collections = Collections {
                 //     path: path.clone(),
                 //     dataset_version_id: dataset_version.id,
                 // };
                 // collections.import()?
+            }
+
+            ImportCommand::Sequences {
+                dataset_id,
+                version,
+                created_at,
+                path,
+            } => {
+                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+                let sequences = Sequences {
+                    path: path.clone(),
+                    dataset_version_id: dataset_version.id,
+                };
+                sequences.import()?
             }
         },
         Commands::Reduce(cmd) => match cmd {

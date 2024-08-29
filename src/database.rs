@@ -177,12 +177,16 @@ pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
 
 
 #[derive(Clone)]
-pub struct FrameLoader {
+pub struct FrameLoader<T> {
     pub pool: PgPool,
+    marker: std::marker::PhantomData<T>,
 }
 
-impl FrameLoader {
-    pub fn new(pool: PgPool) -> FrameLoader {
-        FrameLoader { pool }
+impl<T> FrameLoader<T> {
+    pub fn new(pool: PgPool) -> FrameLoader<T> {
+        FrameLoader {
+            pool,
+            marker: std::marker::PhantomData,
+        }
     }
 }

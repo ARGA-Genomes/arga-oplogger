@@ -36,7 +36,7 @@ use crate::utils::{
 type TaxonFrame = DataFrame<TaxonAtom>;
 
 
-impl OperationLoader for FrameLoader {
+impl OperationLoader for FrameLoader<TaxonOperation> {
     type Operation = TaxonOperation;
 
     fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonOperation>, Error> {
@@ -199,7 +199,7 @@ impl Taxa {
         let reader: CsvReader<Record> = CsvReader::from_path(self.path.clone(), self.dataset_version_id)?;
         let bars = FrameImportBars::new(reader.total_rows);
         let framer = Framer::new(reader);
-        let loader = FrameLoader::new(get_pool()?);
+        let loader = FrameLoader::<TaxonOperation>::new(get_pool()?);
 
         // parse and convert big chunks of rows. this is an IO bound task but for each
         // chunk we need to query the database and then insert into the database, so
