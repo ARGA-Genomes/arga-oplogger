@@ -6,10 +6,9 @@ use crate::database::get_pool;
 use crate::errors::Error;
 use crate::utils::new_progress_bar;
 
-
 /// Import names if they are not already in the table. This is an upsert and will
 /// update the data if it matches on scientific name
-pub fn import(records: &Vec<models::Name>) -> Result<(), Error> {
+pub fn import(records: &[models::Name]) -> Result<(), Error> {
     use diesel::upsert::excluded;
     use schema::names::dsl::*;
 

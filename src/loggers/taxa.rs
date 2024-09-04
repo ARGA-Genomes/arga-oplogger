@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
-use arga_core::crdt::{DataFrame, Version};
+use arga_core::crdt::DataFrame;
 use arga_core::models::{self, TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
 use arga_core::schema;
 use diesel::*;
@@ -10,7 +10,6 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
-use xxhash_rust::xxh3::Xxh3;
 
 use crate::database::{
     dataset_lookup,
@@ -18,10 +17,14 @@ use crate::database::{
     name_lookup,
     refresh_materialized_view,
     taxon_lookup,
+    FrameLoader,
     MaterializedView,
 };
 use crate::errors::Error;
-use crate::operations::{group_operations, merge_operations};
+use crate::frame_push_opt;
+use crate::operations::group_operations;
+use crate::readers::csv::IntoFrame;
+use crate::readers::OperationLoader;
 use crate::utils::{
     new_progress_bar,
     new_spinner,
@@ -30,8 +33,38 @@ use crate::utils::{
     titleize_first_word,
 };
 
-
 type TaxonFrame = DataFrame<TaxonAtom>;
+
+
+impl OperationLoader for FrameLoader<TaxonOperation> {
+    type Operation = TaxonOperation;
+
+    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonOperation>, Error> {
+        use schema::taxa_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        let ops = taxa_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order(operation_id.asc())
+            .load::<TaxonOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn upsert_operations(&self, operations: &[Self::Operation]) -> Result<usize, Error> {
+        use schema::taxa_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        // if there is a conflict based on the operation id then it is a duplicate
+        // operation so do nothing with it
+        let inserted = diesel::insert_into(taxa_logs)
+            .values(operations)
+            .on_conflict_do_nothing()
+            .execute(&mut conn)?;
+
+        Ok(inserted)
+    }
+}
 
 
 /// The CSV record to decompose into operation logs.
@@ -69,6 +102,36 @@ struct Record {
     citation: Option<String>,
     references: Option<String>,
     last_updated: Option<String>,
+}
+
+impl IntoFrame for Record {
+    type Atom = TaxonAtom;
+
+    fn entity_hashable(&self) -> &[u8] {
+        // because arga supports multiple taxonomic systems we use the entity_id
+        // field which should be salted with a unique dataset_id to ensure that
+        // matching scientific names remain unqiue within the dataset only
+        self.entity_id.as_bytes()
+    }
+
+    fn into_frame(self, mut frame: TaxonFrame) -> TaxonFrame {
+        use TaxonAtom::*;
+        frame.push(EntityId(self.entity_id));
+        frame.push(TaxonId(self.taxon_id));
+        frame.push(ScientificName(titleize_first_word(&self.scientific_name)));
+        frame.push(CanonicalName(titleize_first_word(&self.canonical_name)));
+        frame.push(TaxonomicRank(self.taxon_rank));
+        frame.push(TaxonomicStatus(self.taxonomic_status));
+        frame.push(NomenclaturalCode(self.nomenclatural_code));
+        frame_push_opt!(frame, Authorship, self.scientific_name_authorship);
+        frame_push_opt!(frame, Citation, self.citation);
+        frame_push_opt!(frame, References, self.references);
+        frame_push_opt!(frame, LastUpdated, self.last_updated);
+        if let Some(value) = self.parent_taxon {
+            frame.push(ParentTaxon(titleize_first_word(&value)));
+        }
+        frame
+    }
 }
 
 
@@ -112,112 +175,14 @@ pub struct Taxa {
 }
 
 impl Taxa {
-    /// Process a taxonomy CSV file and convert the records to a list of operations.
-    pub fn taxa(&self) -> Result<Vec<TaxonOperation>, Error> {
-        use TaxonAtom::*;
-
-        let spinner = new_spinner("Parsing taxonomy CSV file");
-        let mut records: Vec<Record> = Vec::new();
-        for row in csv::Reader::from_path(&self.path)?.deserialize() {
-            records.push(row?);
-        }
-        spinner.finish();
-
-        // an operation represents one field and a record is a single entity so we have a logical grouping
-        // that would be ideal to represent as a frame (like a database transaction). this allows us to
-        // leverage the logical clock in the operation_id to closely associate these fields and make it
-        // obvious that they occur within the same record, a kind of co-locating of operations.
-        let mut last_version = Version::new();
-        let mut operations: Vec<TaxonOperation> = Vec::new();
-
-        let bar = new_progress_bar(records.len(), "Decomposing records into operation logs");
-        for record in records.into_iter().progress_with(bar) {
-            // because arga supports multiple taxonomic systems we use the taxon_id
-            // from the system as the unique entity id. if we used the scientific name
-            // instead then we would combine and reduce changes from all systems which
-            // is not desireable for our purposes
-            let mut hasher = Xxh3::new();
-            hasher.update(record.entity_id.as_bytes());
-            let hash = hasher.digest();
-
-            let mut frame = TaxonFrame::create(hash.to_string(), self.dataset_version_id, last_version);
-            frame.push(EntityId(record.entity_id));
-            frame.push(TaxonId(record.taxon_id));
-            frame.push(ScientificName(titleize_first_word(&record.scientific_name)));
-            frame.push(CanonicalName(titleize_first_word(&record.canonical_name)));
-            frame.push(TaxonomicRank(record.taxon_rank));
-            frame.push(TaxonomicStatus(record.taxonomic_status));
-            frame.push(NomenclaturalCode(record.nomenclatural_code));
-
-            if let Some(value) = record.parent_taxon {
-                frame.push(ParentTaxon(titleize_first_word(&value)));
-            }
-            if let Some(value) = record.scientific_name_authorship {
-                frame.push(Authorship(value));
-            }
-            if let Some(value) = record.citation {
-                frame.push(Citation(value));
-            }
-            if let Some(value) = record.references {
-                frame.push(References(value));
-            }
-            if let Some(value) = record.last_updated {
-                frame.push(LastUpdated(value));
-            }
-
-            last_version = frame.last_version();
-            operations.extend(frame.collect());
-        }
-
-        Ok(operations)
-    }
-
     /// Import the CSV file as taxon operations into the taxa_logs table.
     ///
     /// This will parse and decompose the CSV file, merge it with the existing taxa logs
     /// and then insert them into the database, effectively updating taxa_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        use schema::taxa_logs::dsl::*;
-
-        let pool = get_pool()?;
-        let mut conn = pool.get()?;
-
-        // load the existing operations. this can be quite large it includes
-        // all operations ever, and is a grow-only table.
-        // a future memory optimised operation could instead group by entity id
-        // first and then query large chunks of logs in parallel
-        let spinner = new_spinner("Loading existing taxon operations");
-        let existing = taxa_logs.order(operation_id.asc()).load::<TaxonOperation>(&mut conn)?;
-        spinner.finish();
-
-        // parse and decompose the input file into taxon operations
-        let records = self.taxa()?;
-
-        // merge the new operations with the existing ones in the database
-        // to deduplicate all ops
-        let spinner = new_spinner("Merging existing and new operations");
-        let records = merge_operations(existing, records)?;
-        spinner.finish();
-
-
-        let mut total_imported = 0;
-        let bar = new_progress_bar(records.len(), "Importing taxon operations");
-
-        // finally import the operations. if there is a conflict based on the operation_id
-        // then it is a duplicate operation so do nothing with it
-        for chunk in records.chunks(1000) {
-            let inserted = diesel::insert_into(taxa_logs)
-                .values(chunk)
-                .on_conflict_do_nothing()
-                .execute(&mut conn)?;
-
-            total_imported += inserted;
-            bar.inc(1000);
-        }
-
-        bar.finish();
-        info!(total = records.len(), total_imported, "Taxa operations import finished");
+        crate::import_csv_as_logs::<Record, TaxonOperation>(&self.path, &self.dataset_version_id)?;
+        info!("Taxa operations import finished");
         Ok(())
     }
 
@@ -242,7 +207,7 @@ impl Taxa {
         spinner.finish();
 
         let spinner = new_spinner("Grouping taxa logs");
-        let entities = group_operations(ops, vec![])?;
+        let entities = group_operations(ops, vec![]);
         spinner.finish();
 
         let mut taxa = Vec::new();
@@ -256,7 +221,7 @@ impl Taxa {
             // allow for multiple taxonomic systems
             let mut taxon = Taxon::from(map);
             if let Some(op) = ops.first() {
-                taxon.dataset_id = op.dataset.global_id.clone();
+                taxon.dataset_id.clone_from(&op.dataset.global_id);
                 taxa.push(taxon);
             }
         }
@@ -304,7 +269,7 @@ impl Taxa {
 
             records.push(models::Taxon {
                 id: Uuid::new_v4(),
-                dataset_id: dataset_uuid.clone(),
+                dataset_id: *dataset_uuid,
                 parent_id: None,
                 entity_id: Some(record.entity_id),
                 status: record.taxonomic_status,
@@ -383,17 +348,17 @@ impl Taxa {
 
         for record in Self::reduce()? {
             if let Some(dataset_uuid) = datasets.get(&record.dataset_id) {
-                let taxon_lookup = (dataset_uuid.clone(), record.scientific_name.clone());
+                let taxon_lookup = (*dataset_uuid, record.scientific_name.clone());
                 if let Some(taxon_uuid) = all_taxa.get(&taxon_lookup) {
                     // add a name link if the name can be found in the database
                     if let Some(name_uuid) = names.get(&record.scientific_name) {
-                        name_links.push((taxon_uuid.clone(), name_uuid.clone()));
+                        name_links.push((*taxon_uuid, *name_uuid));
                     }
 
                     // add a parent link if the taxon can be found in the database
                     if let Some(parent) = record.parent_taxon {
                         if let Some(parent_uuid) = all_taxa.get(&(*dataset_uuid, parent)) {
-                            links.push((taxon_uuid.clone(), parent_uuid.clone()));
+                            links.push((*taxon_uuid, *parent_uuid));
                         }
                     }
                 }
@@ -447,7 +412,6 @@ impl Taxa {
         Ok(())
     }
 }
-
 
 /// Converts a LWW CRDT map of taxon atoms to a Taxon record for serialisation
 impl From<Map<TaxonAtom>> for Taxon {

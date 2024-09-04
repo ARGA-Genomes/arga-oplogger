@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use arga_core::models::DatasetVersion;
 use arga_core::schema;
@@ -11,8 +12,7 @@ use uuid::Uuid;
 use crate::errors::Error;
 use crate::utils::new_spinner;
 
-
-type PgPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 /// A String map. The value is a Uuid associated with the string. For example, a
 /// name of a dataset stored in this map will return the dataset id when queried.
@@ -21,7 +21,6 @@ pub type StringMap = HashMap<String, Uuid>;
 /// A Uuid + String map. The key is a tuple of a uuid and string to allow
 /// for scoping such as all strings from a specific dataset
 pub type UuidStringMap = HashMap<(Uuid, String), Uuid>;
-
 
 /// A refreshable materialized view
 pub enum MaterializedView {
@@ -44,14 +43,15 @@ impl std::fmt::Display for MaterializedView {
     }
 }
 
-
 pub fn get_pool() -> Result<PgPool, Error> {
     let url = arga_core::get_database_url();
     let manager = ConnectionManager::<PgConnection>::new(url);
-    let pool = Pool::builder().build(manager)?;
+    let pool = Pool::builder()
+        .connection_timeout(Duration::from_secs(1))
+        .max_size(30)
+        .build(manager)?;
     Ok(pool)
 }
-
 
 fn find_dataset_id(dataset_id: &str) -> Result<Uuid, Error> {
     use schema::datasets::dsl::*;
@@ -86,7 +86,6 @@ pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str)
     Ok(dataset_version)
 }
 
-
 /// Refreshes a materialized view.
 /// This can be a costly operation depending on the view being refreshed.
 /// Because we cant use bound parameters on this query we instead use an enum to
@@ -98,7 +97,6 @@ pub fn refresh_materialized_view(pool: &mut PgPool, name: MaterializedView) -> R
     spinner.finish();
     Ok(())
 }
-
 
 pub fn dataset_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::datasets::dsl::*;
@@ -116,7 +114,6 @@ pub fn dataset_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     info!(total = map.len(), "Creating dataset map finished");
     Ok(map)
 }
-
 
 pub fn taxon_lookup(pool: &mut PgPool, datasets: &Vec<Uuid>) -> Result<UuidStringMap, Error> {
     use schema::taxa::dsl::*;
@@ -138,7 +135,6 @@ pub fn taxon_lookup(pool: &mut PgPool, datasets: &Vec<Uuid>) -> Result<UuidStrin
     Ok(map)
 }
 
-
 pub fn name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::names::dsl::*;
     info!("Creating name map");
@@ -154,4 +150,41 @@ pub fn name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
 
     info!(total = map.len(), "Creating name map finished");
     Ok(map)
+}
+
+pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::name_publications::dsl::*;
+    info!("Creating name publication map");
+
+    let mut conn = pool.get()?;
+
+    let results = name_publications
+        .select((id, citation))
+        .load::<(Uuid, Option<String>)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    for (uuid, lookup) in results {
+        if let Some(lookup) = lookup {
+            map.insert(lookup, uuid);
+        }
+    }
+
+    info!(total = map.len(), "Creating name publication map finished");
+    Ok(map)
+}
+
+
+#[derive(Clone)]
+pub struct FrameLoader<T> {
+    pub pool: PgPool,
+    marker: std::marker::PhantomData<T>,
+}
+
+impl<T> FrameLoader<T> {
+    pub fn new(pool: PgPool) -> FrameLoader<T> {
+        FrameLoader {
+            pool,
+            marker: std::marker::PhantomData,
+        }
+    }
 }

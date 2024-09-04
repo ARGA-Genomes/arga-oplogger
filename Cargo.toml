@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-arga-core = { git = "https://github.com/ARGA-Genomes/arga-backend.git" }
+# arga-core = { git = "https://github.com/ARGA-Genomes/arga-backend.git" }
 # for local development
-# arga-core = { path = "../backend/core" }
+arga-core = { path = "../backend/core" }
+bigdecimal = { version = "0.4.5", features = ["serde"] }
 chrono = { version = "0.4.38", features = ["serde"] }
 
 clap = { version = "4.5.9", features = ["derive"] }
@@ -15,6 +16,8 @@ diesel = { version = "2.2.2", features = ["uuid", "numeric", "serde_json", "chro
 dotenvy = { version = "0.15.7", features = ["clap"] }
 heck = "0.5.0"
 indicatif = { version = "0.17.8", features = ["rayon"] }
+memchr = "2.7.4"
+memmap2 = "0.9.4"
 rayon = "1.10.0"
 serde = { version = "1.0.204", features = ["derive"] }
 thiserror = "1.0.63"

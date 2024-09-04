@@ -1,16 +1,26 @@
 use std::time::Duration;
 
-use arga_core::models::{TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{NomenclaturalActType, TaxonomicRank, TaxonomicStatus};
 use chrono::{DateTime, Utc};
 use heck::ToTitleCase;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::Deserialize;
 
 use crate::errors::ParseError;
 
-
 pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
 pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
+pub static SPINNER_TOTALS_TEMPLATE: &str = "{spinner:2.cyan/blue} {msg}: {human_pos}";
+
+
+#[macro_export]
+macro_rules! frame_push_opt {
+    ($frame:ident, $discriminant:ident, $field:expr) => {
+        if let Some(value) = $field {
+            $frame.push($discriminant(value));
+        }
+    };
+}
 
 
 pub fn new_spinner(message: &str) -> ProgressBar {
@@ -25,11 +35,52 @@ pub fn new_spinner(message: &str) -> ProgressBar {
 
 pub fn new_progress_bar(total: usize, message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(PROGRESS_TEMPLATE).expect("Invalid progress bar template");
-    let bar = ProgressBar::new(total as u64)
+    ProgressBar::new(total as u64)
+        .with_message(message.to_string())
+        .with_style(style)
+}
+
+pub fn new_spinner_totals(message: &str) -> ProgressBar {
+    let style = ProgressStyle::with_template(SPINNER_TOTALS_TEMPLATE).expect("Invalid spinner template");
+    let spinner = ProgressBar::new_spinner()
         .with_message(message.to_string())
         .with_style(style);
 
-    bar
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner
+}
+
+
+pub struct FrameImportBars {
+    _bars: MultiProgress,
+    pub total: ProgressBar,
+    pub operations: ProgressBar,
+    pub inserted: ProgressBar,
+}
+
+impl FrameImportBars {
+    pub fn new(total: usize) -> FrameImportBars {
+        let bars = MultiProgress::new();
+        let total = new_progress_bar(total, "Importing frames");
+        let operations = new_spinner_totals("Total operations");
+        let inserted = new_spinner_totals("Operations inserted");
+        bars.add(total.clone());
+        bars.add(operations.clone());
+        bars.add(inserted.clone());
+
+        FrameImportBars {
+            _bars: bars,
+            total,
+            operations,
+            inserted,
+        }
+    }
+
+    pub fn finish(&self) {
+        self.total.finish();
+        self.operations.finish();
+        self.inserted.finish();
+    }
 }
 
 
@@ -50,7 +101,6 @@ pub fn titleize_first_word(text: &str) -> String {
     converted.join(" ")
 }
 
-
 pub fn taxonomic_rank_from_str<'de, D>(deserializer: D) -> Result<TaxonomicRank, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -67,6 +117,13 @@ where
     str_to_taxonomic_status(&s).map_err(serde::de::Error::custom)
 }
 
+pub fn nomenclatural_act_from_str<'de, D>(deserializer: D) -> Result<NomenclaturalActType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    str_to_nomenclatural_act(&s).map_err(serde::de::Error::custom)
+}
 
 pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
     use TaxonomicRank::*;
@@ -170,7 +227,6 @@ pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
     }
 }
 
-
 pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseError> {
     use TaxonomicStatus::*;
 
@@ -254,6 +310,23 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
     }
 }
 
+pub fn str_to_nomenclatural_act(value: &str) -> Result<NomenclaturalActType, ParseError> {
+    use NomenclaturalActType::*;
+
+    match value.to_lowercase().as_str() {
+        "species_nova" => Ok(SpeciesNova),
+        "subspecies_nova" => Ok(SubspeciesNova),
+        "genus_species_nova" => Ok(GenusSpeciesNova),
+        "combinatio_nova" => Ok(CombinatioNova),
+        "revived_status" => Ok(RevivedStatus),
+        "name_usage" => Ok(NameUsage),
+        "new_species" => Ok(SpeciesNova),
+        "genus_transfer" => Ok(CombinatioNova),
+        "subgenus_placement" => Ok(SubgenusPlacement),
+
+        val => Err(ParseError::InvalidValue(val.to_string())),
+    }
+}
 
 pub fn parse_date_time(value: &str) -> Result<DateTime<Utc>, ParseError> {
     if let Ok(datetime) = DateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%z") {

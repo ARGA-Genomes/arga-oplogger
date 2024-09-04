@@ -2,7 +2,7 @@
 
 {
   packages = with pkgs; [
-    postgresql
+    postgresql.lib
   ];
 
   languages.rust = {

@@ -11,8 +11,10 @@ pub enum Error {
 
     #[error(transparent)]
     Parsing(#[from] ParseError),
-}
 
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseError {
