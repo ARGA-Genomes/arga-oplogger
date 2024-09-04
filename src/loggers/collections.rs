@@ -1,24 +1,52 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
-use arga_core::{
-    crdt::DataFrame,
-    models::{SpecimenAtom, SpecimenOperation},
-    schema,
-};
+use arga_core::crdt::DataFrame;
+use arga_core::models::{SpecimenAtom, SpecimenOperation};
+use arga_core::schema;
 use diesel::*;
-use rayon::prelude::*;
 use serde::Deserialize;
+use tracing::info;
 use uuid::Uuid;
 
-use crate::{
-    database::get_pool,
-    errors::Error,
-    operations::merge_operations,
-    readers::csv::{CsvReader, EntityHashable, IntoFrame},
-    utils::{new_progress_bar, titleize_first_word},
-};
+use crate::database::FrameLoader;
+use crate::errors::Error;
+use crate::readers::csv::IntoFrame;
+use crate::readers::OperationLoader;
+use crate::utils::titleize_first_word;
 
 type SpecimenFrame = DataFrame<SpecimenAtom>;
+
+
+impl OperationLoader for FrameLoader<SpecimenOperation> {
+    type Operation = SpecimenOperation;
+
+    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<SpecimenOperation>, Error> {
+        use schema::specimen_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        let ops = specimen_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order(operation_id.asc())
+            .load::<SpecimenOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn upsert_operations(&self, operations: &[SpecimenOperation]) -> Result<usize, Error> {
+        use schema::specimen_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        // if there is a conflict based on the operation id then it is a duplicate
+        // operation so do nothing with it
+        let inserted = diesel::insert_into(specimen_logs)
+            .values(operations)
+            .on_conflict_do_nothing()
+            .execute(&mut conn)?;
+
+        Ok(inserted)
+    }
+}
+
 
 // A single row in a supported CSV file.
 //
@@ -93,14 +121,12 @@ struct Record {
     // isolate: Option<String>,
 }
 
-impl EntityHashable for Record {
+impl IntoFrame for Record {
+    type Atom = SpecimenAtom;
+
     fn entity_hashable(&self) -> &[u8] {
         self.entity_id.as_bytes()
     }
-}
-
-impl IntoFrame for Record {
-    type Atom = SpecimenAtom;
 
     fn into_frame(self, mut frame: SpecimenFrame) -> SpecimenFrame {
         use SpecimenAtom::*;
@@ -118,91 +144,8 @@ pub struct Collections {
 
 impl Collections {
     pub fn import(&self) -> Result<(), Error> {
-        use schema::specimen_logs::dsl::*;
-
-        let pool = get_pool()?;
-        // let conn = pool.get()?;
-
-        let reader: CsvReader<Record> = CsvReader::from_path(self.path.clone(), self.dataset_version_id)?;
-
-        let progress = new_progress_bar(reader.total_rows, "Converting and importing");
-        progress.enable_steady_tick(Duration::from_millis(100));
-
-        // let mut total_inserted = 0;
-        // let mut total_skipped = 0;
-
-        // for chunk in reader {
-        //     let total_rows = chunk.len();
-
-        //     // bail if we run into an error
-        //     let mut records = Vec::with_capacity(chunk.len());
-        //     for record in chunk {
-        //         records.push(record?)
-        //     }
-
-        //     let entity_ids: Vec<&String> = records.iter().map(|r| &r.entity_id).collect();
-
-        //     let existing = specimen_logs
-        //         .filter(entity_id.eq_any(entity_ids))
-        //         .order(operation_id.asc())
-        //         .load::<SpecimenOperation>(&mut conn)?;
-
-        //     let mut new_ops = Vec::new();
-        //     for record in records {
-        //         let ops: Vec<SpecimenOperation> = record.operations.into_iter().map(|o| o.into()).collect();
-        //         new_ops.extend(ops);
-        //     }
-        //     let ops = merge_operations(existing, new_ops)?;
-
-        //     let inserted = diesel::insert_into(specimen_logs)
-        //         .values(&ops)
-        //         .on_conflict_do_nothing()
-        //         .execute(&mut conn)?;
-
-        //     total_inserted += inserted;
-        //     total_skipped += ops.len() - inserted;
-
-        //     progress.inc(total_rows as u64);
-        //     progress.set_message(format!("Operations: inserted: {}, skipped: {}", total_inserted, total_skipped));
-        // }
-
-        reader.into_iter().par_bridge().try_for_each_with(pool, |pool, chunk| {
-            let total_rows = chunk.len();
-            let mut conn = pool.get()?;
-
-            // bail if we run into an error
-            let mut records = Vec::with_capacity(chunk.len());
-            for record in chunk {
-                records.push(record?)
-            }
-
-            let entity_ids: Vec<&String> = records.iter().map(|r| &r.entity_id).collect();
-
-            let existing = specimen_logs
-                .filter(entity_id.eq_any(entity_ids))
-                .order(operation_id.asc())
-                .load::<SpecimenOperation>(&mut conn)?;
-
-            let mut new_ops = Vec::new();
-            for record in records {
-                let ops: Vec<SpecimenOperation> = record.operations.into_iter().map(|o| o.into()).collect();
-                new_ops.extend(ops);
-            }
-            let ops = merge_operations(existing, new_ops)?;
-
-            let inserted = diesel::insert_into(specimen_logs)
-                .values(&ops)
-                .on_conflict_do_nothing()
-                .execute(&mut conn)?;
-
-            progress.inc(total_rows as u64);
-            progress.set_message(format!("inserted: {inserted}"));
-
-            Ok::<(), Error>(())
-        })?;
-
-        // progress.finish_with_message("Totals: Inserted: {total_inserted}, Skipped: {total_skipped}");
-
+        crate::import_csv_as_logs::<Record, SpecimenOperation>(&self.path, &self.dataset_version_id)?;
+        info!("Specimen logs imported");
         Ok(())
     }
 }

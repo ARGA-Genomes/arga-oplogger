@@ -52,7 +52,7 @@ pub fn new_spinner_totals(message: &str) -> ProgressBar {
 
 
 pub struct FrameImportBars {
-    bars: MultiProgress,
+    _bars: MultiProgress,
     pub total: ProgressBar,
     pub operations: ProgressBar,
     pub inserted: ProgressBar,
@@ -69,7 +69,7 @@ impl FrameImportBars {
         bars.add(inserted.clone());
 
         FrameImportBars {
-            bars,
+            _bars: bars,
             total,
             operations,
             inserted,
@@ -322,7 +322,7 @@ pub fn str_to_nomenclatural_act(value: &str) -> Result<NomenclaturalActType, Par
         "name_usage" => Ok(NameUsage),
         "new_species" => Ok(SpeciesNova),
         "genus_transfer" => Ok(CombinatioNova),
-        "subgenus_placement" => Ok(CombinatioNova),
+        "subgenus_placement" => Ok(SubgenusPlacement),
 
         val => Err(ParseError::InvalidValue(val.to_string())),
     }

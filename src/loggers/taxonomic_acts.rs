@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
-use arga_core::crdt::{DataFrame, Version};
+use arga_core::crdt::DataFrame;
 use arga_core::models::{
     self,
     TaxonomicActAtom,
@@ -18,14 +18,48 @@ use indicatif::ProgressIterator;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
-use xxhash_rust::xxh3::Xxh3;
 
-use crate::database::{dataset_lookup, get_pool, taxon_lookup};
+use crate::database::{dataset_lookup, get_pool, taxon_lookup, FrameLoader};
 use crate::errors::Error;
-use crate::operations::{group_operations, merge_operations};
+use crate::frame_push_opt;
+use crate::operations::group_operations;
+use crate::readers::csv::IntoFrame;
+use crate::readers::OperationLoader;
 use crate::utils::{date_time_from_str_opt, new_progress_bar, new_spinner, taxonomic_status_from_str};
 
 type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
+
+
+impl OperationLoader for FrameLoader<TaxonomicActOperation> {
+    type Operation = TaxonomicActOperation;
+
+    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonomicActOperation>, Error> {
+        use schema::taxonomic_act_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        let ops = taxonomic_act_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order(operation_id.asc())
+            .load::<TaxonomicActOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn upsert_operations(&self, operations: &[TaxonomicActOperation]) -> Result<usize, Error> {
+        use schema::taxonomic_act_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        // if there is a conflict based on the operation id then it is a duplicate
+        // operation so do nothing with it
+        let inserted = diesel::insert_into(taxonomic_act_logs)
+            .values(operations)
+            .on_conflict_do_nothing()
+            .execute(&mut conn)?;
+
+        Ok(inserted)
+    }
+}
+
 
 /// The CSV record to decompose into operation logs.
 /// This is deserializeable with the serde crate and enforces expectations
@@ -53,6 +87,41 @@ struct Record {
     updated_at: Option<DateTime<Utc>>,
 
     references: Option<String>,
+}
+
+impl IntoFrame for Record {
+    type Atom = TaxonomicActAtom;
+
+    fn entity_hashable(&self) -> &[u8] {
+        // the nomenclatural act id should be an externally unique value that all datasets
+        // reference if they are describing this particular datum
+        self.entity_id.as_bytes()
+    }
+
+    fn into_frame(self, mut frame: TaxonomicActFrame) -> TaxonomicActFrame {
+        use TaxonomicActAtom::*;
+
+        // derive the act from the taxonomic status
+        let act = match self.taxonomic_status {
+            TaxonomicStatus::Accepted => Some(TaxonomicActType::Accepted),
+            TaxonomicStatus::Synonym => Some(TaxonomicActType::Synonym),
+            TaxonomicStatus::Homonym => Some(TaxonomicActType::Homonym),
+            TaxonomicStatus::Unaccepted => Some(TaxonomicActType::Unaccepted),
+            TaxonomicStatus::NomenclaturalSynonym => Some(TaxonomicActType::NomenclaturalSynonym),
+            TaxonomicStatus::TaxonomicSynonym => Some(TaxonomicActType::TaxonomicSynonym),
+            TaxonomicStatus::ReplacedSynonym => Some(TaxonomicActType::ReplacedSynonym),
+            _ => None,
+        };
+
+        frame.push(EntityId(self.entity_id));
+        frame.push(Taxon(self.scientific_name));
+        frame_push_opt!(frame, Act, act);
+        frame_push_opt!(frame, AcceptedTaxon, self.accepted_usage_taxon);
+        frame_push_opt!(frame, SourceUrl, self.references);
+        frame_push_opt!(frame, CreatedAt, self.created_at);
+        frame_push_opt!(frame, UpdatedAt, self.updated_at);
+        frame
+    }
 }
 
 /// The ARGA taxonomic act CSV record output
@@ -89,124 +158,14 @@ pub struct TaxonomicActs {
 }
 
 impl TaxonomicActs {
-    pub fn acts(&self) -> Result<Vec<TaxonomicActOperation>, Error> {
-        use TaxonomicActAtom::*;
-
-        let spinner = new_spinner("Parsing taxonomy CSV file");
-        let mut records: Vec<Record> = Vec::new();
-        for row in csv::Reader::from_path(&self.path)?.deserialize() {
-            records.push(row?);
-        }
-        spinner.finish();
-
-        // an operation represents one field and a record is a single entity so we have a logical grouping
-        // that would be ideal to represent as a frame (like a database transaction). this allows us to
-        // leverage the logical clock in the operation_id to closely associate these fields and make it
-        // obvious that they occur within the same record, a kind of co-locating of operations.
-        let mut last_version = Version::new();
-        let mut operations: Vec<TaxonomicActOperation> = Vec::new();
-
-        let bar = new_progress_bar(records.len(), "Decomposing records into operation logs");
-        for record in records.into_iter().progress_with(bar) {
-            // derive the act from the taxonomic status
-            let act = match record.taxonomic_status {
-                TaxonomicStatus::Accepted => Some(TaxonomicActType::Accepted),
-                TaxonomicStatus::Synonym => Some(TaxonomicActType::Synonym),
-                TaxonomicStatus::Homonym => Some(TaxonomicActType::Homonym),
-                TaxonomicStatus::Unaccepted => Some(TaxonomicActType::Unaccepted),
-                TaxonomicStatus::NomenclaturalSynonym => Some(TaxonomicActType::NomenclaturalSynonym),
-                TaxonomicStatus::TaxonomicSynonym => Some(TaxonomicActType::TaxonomicSynonym),
-                TaxonomicStatus::ReplacedSynonym => Some(TaxonomicActType::ReplacedSynonym),
-                _ => None,
-            };
-
-            // skip anything that isn't supported
-            if act.is_none() {
-                continue;
-            }
-
-            // because arga supports multiple taxonomic systems we use the taxon_id
-            // from the system as the unique entity id. if we used the scientific name
-            // instead then we would combine and reduce changes from all systems which
-            // is not desireable for our purposes
-            let mut hasher = Xxh3::new();
-            hasher.update(record.entity_id.as_bytes());
-            let hash = hasher.digest();
-
-            let mut frame = TaxonomicActFrame::create(hash.to_string(), self.dataset_version_id, last_version);
-            frame.push(EntityId(record.entity_id));
-            frame.push(Taxon(record.scientific_name));
-
-            if let Some(value) = act {
-                frame.push(Act(value));
-            }
-            if let Some(value) = record.accepted_usage_taxon {
-                frame.push(AcceptedTaxon(value));
-            }
-            if let Some(value) = record.references {
-                frame.push(SourceUrl(value));
-            }
-            if let Some(value) = record.created_at {
-                frame.push(CreatedAt(value));
-            }
-            if let Some(value) = record.updated_at {
-                frame.push(UpdatedAt(value));
-            }
-
-            last_version = frame.last_version();
-            operations.extend(frame.collect());
-        }
-
-        Ok(operations)
-    }
-
     /// Import the CSV file as taxonomic act operations into the taxonomic_act_logs table.
     ///
     /// This will parse and decompose the CSV file, merge it with the existing taxonomic act logs
     /// and then insert them into the database, effectively updating taxonomic_act_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        use schema::taxonomic_act_logs::dsl::*;
-
-        let pool = get_pool()?;
-        let mut conn = pool.get()?;
-
-        // load the existing operations. this can be quite large it includes
-        // all operations ever, and is a grow-only table.
-        // a future memory optimised operation could instead group by entity id
-        // first and then query large chunks of logs in parallel
-        let spinner = new_spinner("Loading existing taxonomic act operations");
-        let existing = taxonomic_act_logs
-            .order(operation_id.asc())
-            .load::<TaxonomicActOperation>(&mut conn)?;
-        spinner.finish();
-
-        // parse and decompose the input file into taxon operations
-        let records = self.acts()?;
-
-        // merge the new operations with the existing ones in the database
-        // to deduplicate all ops
-        let spinner = new_spinner("Merging existing and new operations");
-        let records = merge_operations(existing, records);
-        spinner.finish();
-
-        let mut total_imported = 0;
-        let bar = new_progress_bar(records.len(), "Importing taxonomic act operations");
-
-        // finally import the operations. if there is a conflict based on the operation_id
-        // then it is a duplicate operation so do nothing with it
-        for chunk in records.chunks(1000) {
-            let inserted = diesel::insert_into(taxonomic_act_logs)
-                .values(chunk)
-                .on_conflict_do_nothing()
-                .execute(&mut conn)?;
-
-            total_imported += inserted;
-            bar.inc(1000);
-        }
-
-        bar.finish();
-        info!(total_imported, "Taxonomic act logs imported");
+        crate::import_csv_as_logs::<Record, TaxonomicActOperation>(&self.path, &self.dataset_version_id)?;
+        info!("Taxonomic act logs imported");
         Ok(())
     }
 

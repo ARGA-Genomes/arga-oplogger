@@ -21,8 +21,9 @@ use crate::database::{
     MaterializedView,
 };
 use crate::errors::Error;
-use crate::operations::{distinct_changes, group_operations, Framer};
-use crate::readers::csv::{CsvReader, IntoFrame};
+use crate::frame_push_opt;
+use crate::operations::group_operations;
+use crate::readers::csv::IntoFrame;
 use crate::readers::OperationLoader;
 use crate::utils::{
     new_progress_bar,
@@ -30,7 +31,6 @@ use crate::utils::{
     taxonomic_rank_from_str,
     taxonomic_status_from_str,
     titleize_first_word,
-    FrameImportBars,
 };
 
 type TaxonFrame = DataFrame<TaxonAtom>;
@@ -123,23 +123,13 @@ impl IntoFrame for Record {
         frame.push(TaxonomicRank(self.taxon_rank));
         frame.push(TaxonomicStatus(self.taxonomic_status));
         frame.push(NomenclaturalCode(self.nomenclatural_code));
-
+        frame_push_opt!(frame, Authorship, self.scientific_name_authorship);
+        frame_push_opt!(frame, Citation, self.citation);
+        frame_push_opt!(frame, References, self.references);
+        frame_push_opt!(frame, LastUpdated, self.last_updated);
         if let Some(value) = self.parent_taxon {
             frame.push(ParentTaxon(titleize_first_word(&value)));
         }
-        if let Some(value) = self.scientific_name_authorship {
-            frame.push(Authorship(value));
-        }
-        if let Some(value) = self.citation {
-            frame.push(Citation(value));
-        }
-        if let Some(value) = self.references {
-            frame.push(References(value));
-        }
-        if let Some(value) = self.last_updated {
-            frame.push(LastUpdated(value));
-        }
-
         frame
     }
 }
@@ -191,42 +181,7 @@ impl Taxa {
     /// and then insert them into the database, effectively updating taxa_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        // we need a few components to fully import operation logs. the first is a CSV file reader
-        // which parses each row and converts it into a frame. the second is a framer which allows
-        // us to conveniently get chunks of frames from the reader and sets us up for easy parallelization.
-        // and the third is the frame loader which allows us to query the database to deduplicate and
-        // pull out unique operations, as well as upsert the new operations.
-        let reader: CsvReader<Record> = CsvReader::from_path(self.path.clone(), self.dataset_version_id)?;
-        let bars = FrameImportBars::new(reader.total_rows);
-        let framer = Framer::new(reader);
-        let loader = FrameLoader::<TaxonOperation>::new(get_pool()?);
-
-        // parse and convert big chunks of rows. this is an IO bound task but for each
-        // chunk we need to query the database and then insert into the database, so
-        // we parallelize the frame merging and inserting instead since it is an order of
-        // magnitude slower than the parsing
-        for frames in framer.chunks(20_000) {
-            let total_frames = frames.len();
-
-            // we flatten out all the frames into operations and process them in chunks of 10k.
-            // postgres has a parameter limit and by chunking it we can query the database to
-            // filter to distinct changes and import it in bulk without triggering any errors.
-            frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
-                let total = slice.len();
-
-                // compare the ops with previously imported ops and only return actual changes
-                let changes = distinct_changes(slice.to_vec(), &loader)?;
-                let inserted = loader.upsert_operations(&changes)?;
-
-                bars.inserted.inc(inserted as u64);
-                bars.operations.inc(total as u64);
-                Ok::<(), Error>(())
-            })?;
-
-            bars.total.inc(total_frames as u64);
-        }
-
-        bars.finish();
+        crate::import_csv_as_logs::<Record, TaxonOperation>(&self.path, &self.dataset_version_id)?;
         info!("Taxa operations import finished");
         Ok(())
     }

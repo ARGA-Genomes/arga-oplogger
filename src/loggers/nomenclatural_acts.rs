@@ -1,23 +1,56 @@
 use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
-use arga_core::crdt::{DataFrame, Version};
+use arga_core::crdt::DataFrame;
 use arga_core::models::{self, NomenclaturalActAtom, NomenclaturalActOperation, NomenclaturalActType};
 use arga_core::schema;
-use chrono::{DateTime, Utc};
 use diesel::*;
 use indicatif::ProgressIterator;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
-use xxhash_rust::xxh3::Xxh3;
 
-use crate::database::{get_pool, name_lookup, name_publication_lookup};
+use crate::database::{get_pool, name_lookup, name_publication_lookup, FrameLoader};
 use crate::errors::Error;
-use crate::operations::{group_operations, merge_operations};
-use crate::utils::{date_time_from_str_opt, new_progress_bar, new_spinner, nomenclatural_act_from_str};
+use crate::frame_push_opt;
+use crate::operations::group_operations;
+use crate::readers::csv::IntoFrame;
+use crate::readers::OperationLoader;
+use crate::utils::{new_progress_bar, new_spinner, nomenclatural_act_from_str};
 
 type NomenclaturalActFrame = DataFrame<NomenclaturalActAtom>;
+
+
+impl OperationLoader for FrameLoader<NomenclaturalActOperation> {
+    type Operation = NomenclaturalActOperation;
+
+    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<NomenclaturalActOperation>, Error> {
+        use schema::nomenclatural_act_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        let ops = nomenclatural_act_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order(operation_id.asc())
+            .load::<NomenclaturalActOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn upsert_operations(&self, operations: &[NomenclaturalActOperation]) -> Result<usize, Error> {
+        use schema::nomenclatural_act_logs::dsl::*;
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        // if there is a conflict based on the operation id then it is a duplicate
+        // operation so do nothing with it
+        let inserted = diesel::insert_into(nomenclatural_act_logs)
+            .values(operations)
+            .on_conflict_do_nothing()
+            .execute(&mut conn)?;
+
+        Ok(inserted)
+    }
+}
+
 
 /// The CSV record to decompose into operation logs.
 /// This is deserializeable with the serde crate and enforces expectations
@@ -30,6 +63,10 @@ struct Record {
 
     /// The name of the taxon. Should include author when possible
     scientific_name: String,
+    /// The name of the taxon without the author
+    // canonical_name: String,
+    /// The authorship of the taxon
+    // authorship: String,
     /// The name of the taxon currently accepted. Should include author when possible
     acted_on: Option<String>,
 
@@ -41,14 +78,36 @@ struct Record {
     publication_date: Option<String>,
 
     source_url: String,
-    _citation: Option<String>,
+    // citation: Option<String>,
 
-    /// The timestamp of when the record was created at the data source
-    #[serde(deserialize_with = "date_time_from_str_opt")]
-    _created_at: Option<DateTime<Utc>>,
-    /// The timestamp of when the record was update at the data source
-    #[serde(deserialize_with = "date_time_from_str_opt")]
-    _updated_at: Option<DateTime<Utc>>,
+    // /// The timestamp of when the record was created at the data source
+    // #[serde(deserialize_with = "date_time_from_str_opt")]
+    // created_at: Option<DateTime<Utc>>,
+    // /// The timestamp of when the record was update at the data source
+    // #[serde(deserialize_with = "date_time_from_str_opt")]
+    // updated_at: Option<DateTime<Utc>>,
+}
+
+impl IntoFrame for Record {
+    type Atom = NomenclaturalActAtom;
+
+    fn entity_hashable(&self) -> &[u8] {
+        // the nomenclatural act id should be an externally unique value that all datasets
+        // reference if they are describing this particular datum
+        self.entity_id.as_bytes()
+    }
+
+    fn into_frame(self, mut frame: NomenclaturalActFrame) -> NomenclaturalActFrame {
+        use NomenclaturalActAtom::*;
+        frame.push(EntityId(self.entity_id.clone()));
+        frame.push(ScientificName(self.scientific_name));
+        frame.push(Act(self.act));
+        frame.push(SourceUrl(self.source_url));
+        frame.push(Publication(self.publication));
+        frame_push_opt!(frame, ActedOn, self.acted_on);
+        frame_push_opt!(frame, PublicationDate, self.publication_date);
+        frame
+    }
 }
 
 /// The ARGA taxonomic act CSV record output
@@ -79,101 +138,14 @@ pub struct NomenclaturalActs {
 }
 
 impl NomenclaturalActs {
-    pub fn acts(&self) -> Result<Vec<NomenclaturalActOperation>, Error> {
-        use NomenclaturalActAtom::*;
-
-        let spinner = new_spinner("Parsing taxonomy CSV file");
-        let mut records: Vec<Record> = Vec::new();
-        for row in csv::Reader::from_path(&self.path)?.deserialize() {
-            records.push(row?);
-        }
-        spinner.finish();
-
-        // an operation represents one field and a record is a single entity so we have a logical grouping
-        // that would be ideal to represent as a frame (like a database transaction). this allows us to
-        // leverage the logical clock in the operation_id to closely associate these fields and make it
-        // obvious that they occur within the same record, a kind of co-locating of operations.
-        let mut last_version = Version::new();
-        let mut operations: Vec<NomenclaturalActOperation> = Vec::new();
-
-        let bar = new_progress_bar(records.len(), "Decomposing records into operation logs");
-        for record in records.into_iter().progress_with(bar) {
-            // because arga supports multiple taxonomic systems we use the taxon_id
-            // from the system as the unique entity id. if we used the scientific name
-            // instead then we would combine and reduce changes from all systems which
-            // is not desireable for our purposes
-            let mut hasher = Xxh3::new();
-            hasher.update(record.entity_id.as_bytes());
-            let hash = hasher.digest();
-
-            let mut frame = NomenclaturalActFrame::create(hash.to_string(), self.dataset_version_id, last_version);
-            // frame.push(EntityId(record.entity_id));
-            frame.push(ScientificName(record.scientific_name));
-            frame.push(Act(record.act));
-            frame.push(SourceUrl(record.source_url));
-            frame.push(Publication(record.publication));
-
-            if let Some(value) = record.acted_on {
-                frame.push(ActedOn(value));
-            }
-            if let Some(value) = record.publication_date {
-                frame.push(PublicationDate(value));
-            }
-
-            last_version = frame.last_version();
-            operations.extend(frame.collect());
-        }
-
-        Ok(operations)
-    }
-
     /// Import the CSV file as taxonomic act operations into the taxonomic_act_logs table.
     ///
     /// This will parse and decompose the CSV file, merge it with the existing taxonomic act logs
     /// and then insert them into the database, effectively updating taxonomic_act_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        use schema::nomenclatural_act_logs::dsl::*;
-
-        let pool = get_pool()?;
-        let mut conn = pool.get()?;
-
-        // load the existing operations. this can be quite large it includes
-        // all operations ever, and is a grow-only table.
-        // a future memory optimised operation could instead group by entity id
-        // first and then query large chunks of logs in parallel
-        let spinner = new_spinner("Loading existing nomenclatural act operations");
-        let existing = nomenclatural_act_logs
-            .order(operation_id.asc())
-            .load::<NomenclaturalActOperation>(&mut conn)?;
-        spinner.finish();
-
-        // parse and decompose the input file into taxon operations
-        let records = self.acts()?;
-
-        // merge the new operations with the existing ones in the database
-        // to deduplicate all ops
-        let spinner = new_spinner("Merging existing and new operations");
-        let records = merge_operations(existing, records);
-        spinner.finish();
-
-        let mut total_imported = 0;
-        let bar = new_progress_bar(records.len(), "Importing nomenclatural act operations");
-
-        // finally import the operations. if there is a conflict based on the operation_id
-        // then it is a duplicate operation so do nothing with it
-        for chunk in records.chunks(1000) {
-            let inserted = diesel::insert_into(nomenclatural_act_logs)
-                .values(chunk)
-                .on_conflict_do_nothing()
-                .execute(&mut conn)?;
-
-            total_imported += inserted;
-            bar.inc(1000);
-        }
-
-        bar.finish();
-        info!(total_imported, "Nomenclatural act logs imported");
+        crate::import_csv_as_logs::<Record, NomenclaturalActOperation>(&self.path, &self.dataset_version_id)?;
+        info!("Nomenclatural act logs imported");
         Ok(())
     }
 

@@ -173,11 +173,11 @@ fn main() -> Result<(), Error> {
                 path,
             } => {
                 let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
-                // let collections = Collections {
-                //     path: path.clone(),
-                //     dataset_version_id: dataset_version.id,
-                // };
-                // collections.import()?
+                let collections = Collections {
+                    path: path.clone(),
+                    dataset_version_id: dataset_version.id,
+                };
+                collections.import()?
             }
 
             ImportCommand::Sequences {

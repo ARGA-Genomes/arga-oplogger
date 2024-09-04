@@ -4,18 +4,15 @@ use arga_core::crdt::DataFrame;
 use arga_core::models::{SequenceAtom, SequenceOperation};
 use arga_core::schema;
 use diesel::*;
-use rayon::prelude::*;
 use serde::Deserialize;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::database::{get_pool, FrameLoader};
+use crate::database::FrameLoader;
 use crate::errors::Error;
 use crate::frame_push_opt;
-use crate::operations::{distinct_changes, Framer};
-use crate::readers::csv::{CsvReader, IntoFrame};
+use crate::readers::csv::IntoFrame;
 use crate::readers::OperationLoader;
-use crate::utils::FrameImportBars;
 
 type SequenceFrame = DataFrame<SequenceAtom>;
 
@@ -126,42 +123,7 @@ impl Sequences {
     /// and then insert them into the database, effectively updating sequence_logs with the
     /// latest changes from the dataset.
     pub fn import(&self) -> Result<(), Error> {
-        // we need a few components to fully import operation logs. the first is a CSV file reader
-        // which parses each row and converts it into a frame. the second is a framer which allows
-        // us to conveniently get chunks of frames from the reader and sets us up for easy parallelization.
-        // and the third is the frame loader which allows us to query the database to deduplicate and
-        // pull out unique operations, as well as upsert the new operations.
-        let reader: CsvReader<Record> = CsvReader::from_path(self.path.clone(), self.dataset_version_id)?;
-        let bars = FrameImportBars::new(reader.total_rows);
-        let framer = Framer::new(reader);
-        let loader = FrameLoader::<SequenceOperation>::new(get_pool()?);
-
-        // parse and convert big chunks of rows. this is an IO bound task but for each
-        // chunk we need to query the database and then insert into the database, so
-        // we parallelize the frame merging and inserting instead since it is an order of
-        // magnitude slower than the parsing
-        for frames in framer.chunks(20_000) {
-            let total_frames = frames.len();
-
-            // we flatten out all the frames into operations and process them in chunks of 10k.
-            // postgres has a parameter limit and by chunking it we can query the database to
-            // filter to distinct changes and import it in bulk without triggering any errors.
-            frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
-                let total = slice.len();
-
-                // compare the ops with previously imported ops and only return actual changes
-                let changes = distinct_changes(slice.to_vec(), &loader)?;
-                let inserted = loader.upsert_operations(&changes)?;
-
-                bars.inserted.inc(inserted as u64);
-                bars.operations.inc(total as u64);
-                Ok::<(), Error>(())
-            })?;
-
-            bars.total.inc(total_frames as u64);
-        }
-
-        bars.finish();
+        crate::import_csv_as_logs::<Record, SequenceOperation>(&self.path, &self.dataset_version_id)?;
         info!("Sequence operations import finished");
         Ok(())
     }
