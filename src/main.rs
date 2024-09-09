@@ -7,10 +7,11 @@ mod utils;
 
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Args, Parser};
 use database::create_dataset_version;
 use errors::Error;
 use loggers::*;
+use readers::plazi;
 
 /// The ARGA operation logger
 #[derive(Parser)]
@@ -33,69 +34,40 @@ pub enum Commands {
     /// Update the database with the latest reduced data
     #[command(subcommand)]
     Update(UpdateCommand),
+
+    /// Specific commands for the plazi treatment bank dataset
+    #[command(subcommand)]
+    Plazi(PlaziCommand),
+}
+
+#[derive(Args)]
+pub struct DefaultImportArgs {
+    /// The global identifier describing the dataset
+    dataset_id: String,
+    /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
+    version: String,
+    /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
+    created_at: String,
+    /// The path to the CSV file to import as operation logs
+    path: PathBuf,
 }
 
 #[derive(clap::Subcommand)]
 pub enum ImportCommand {
     /// Import taxa from a CSV dataset
-    Taxa {
-        /// The global identifier describing the dataset
-        dataset_id: String,
-        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
-        version: String,
-        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
-        created_at: String,
-        /// The path to the CSV file to import as operation logs
-        path: PathBuf,
-    },
+    Taxa(DefaultImportArgs),
 
     /// Import taxonomic acts from a CSV dataset
-    TaxonomicActs {
-        /// The global identifier describing the dataset
-        dataset_id: String,
-        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
-        version: String,
-        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
-        created_at: String,
-        /// The path to the CSV file to import as operation logs
-        path: PathBuf,
-    },
+    TaxonomicActs(DefaultImportArgs),
 
     /// Import nomenclatural acts from a CSV dataset
-    NomenclaturalActs {
-        /// The global identifier describing the dataset
-        dataset_id: String,
-        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
-        version: String,
-        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
-        created_at: String,
-        /// The path to the CSV file to import as operation logs
-        path: PathBuf,
-    },
+    NomenclaturalActs(DefaultImportArgs),
 
     /// Import collections from a CSV dataset
-    Collections {
-        /// The global identifier describing the dataset
-        dataset_id: String,
-        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
-        version: String,
-        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
-        created_at: String,
-        /// The path to the CSV file to import as operation logs
-        path: PathBuf,
-    },
+    Collections(DefaultImportArgs),
 
     /// Import sequences from a CSV dataset
-    Sequences {
-        /// The global identifier describing the dataset
-        dataset_id: String,
-        /// The version of this dataset. eg (v4, 20240102, abf839sfa0939faz204)
-        version: String,
-        /// The timestamp of when this dataset version was created. in yyyy-mm-dd hh:mm:ss format
-        created_at: String,
-        /// The path to the CSV file to import as operation logs
-        path: PathBuf,
-    },
+    Sequences(DefaultImportArgs),
 }
 
 #[derive(clap::Subcommand)]
@@ -116,6 +88,13 @@ pub enum UpdateCommand {
     NomenclaturalActs,
 }
 
+#[derive(clap::Subcommand)]
+pub enum PlaziCommand {
+    /// Transform and import plazi treatment bank xml files
+    Import(DefaultImportArgs),
+}
+
+
 fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
@@ -124,71 +103,46 @@ fn main() -> Result<(), Error> {
 
     match &cli.command {
         Commands::Import(cmd) => match cmd {
-            ImportCommand::Taxa {
-                dataset_id,
-                version,
-                created_at,
-                path,
-            } => {
-                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+            ImportCommand::Taxa(args) => {
+                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let taxa = Taxa {
-                    path: path.clone(),
+                    path: args.path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
                 taxa.import()?
             }
 
-            ImportCommand::TaxonomicActs {
-                dataset_id,
-                version,
-                created_at,
-                path,
-            } => {
-                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+            ImportCommand::TaxonomicActs(args) => {
+                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let taxa = TaxonomicActs {
-                    path: path.clone(),
+                    path: args.path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
                 taxa.import()?
             }
 
-            ImportCommand::NomenclaturalActs {
-                dataset_id,
-                version,
-                created_at,
-                path,
-            } => {
-                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+            ImportCommand::NomenclaturalActs(args) => {
+                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let acts = NomenclaturalActs {
-                    path: path.clone(),
+                    path: args.path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
                 acts.import()?
             }
 
-            ImportCommand::Collections {
-                dataset_id,
-                version,
-                created_at,
-                path,
-            } => {
-                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+            ImportCommand::Collections(args) => {
+                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let collections = Collections {
-                    path: path.clone(),
+                    path: args.path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
                 collections.import()?
             }
 
-            ImportCommand::Sequences {
-                dataset_id,
-                version,
-                created_at,
-                path,
-            } => {
-                let dataset_version = create_dataset_version(dataset_id, version, created_at)?;
+            ImportCommand::Sequences(args) => {
+                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let sequences = Sequences {
-                    path: path.clone(),
+                    path: args.path.clone(),
                     dataset_version_id: dataset_version.id,
                 };
                 sequences.import()?
@@ -218,6 +172,13 @@ fn main() -> Result<(), Error> {
             }
             UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
+        },
+
+        Commands::Plazi(cmd) => match cmd {
+            PlaziCommand::Import(args) => {
+                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
+                plazi::treatments::import(args.path.clone(), dataset_version)?;
+            }
         },
     }
 
