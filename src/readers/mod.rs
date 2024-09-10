@@ -1,6 +1,7 @@
 use crate::errors::Error;
 
 pub mod csv;
+pub mod meta;
 
 
 pub trait OperationLoader {

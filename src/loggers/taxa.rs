@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
@@ -21,10 +22,9 @@ use crate::database::{
     MaterializedView,
 };
 use crate::errors::Error;
-use crate::frame_push_opt;
 use crate::operations::group_operations;
 use crate::readers::csv::IntoFrame;
-use crate::readers::OperationLoader;
+use crate::readers::{meta, OperationLoader};
 use crate::utils::{
     new_progress_bar,
     new_spinner,
@@ -32,6 +32,7 @@ use crate::utils::{
     taxonomic_status_from_str,
     titleize_first_word,
 };
+use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
 type TaxonFrame = DataFrame<TaxonAtom>;
 
@@ -168,6 +169,10 @@ pub struct Taxon {
     last_updated: Option<String>,
 }
 
+
+pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Result<(), Error> {
+    import_compressed_csv_stream::<S, Record, TaxonOperation>(stream, dataset)
+}
 
 pub struct Taxa {
     pub path: PathBuf,

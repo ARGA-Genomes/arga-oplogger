@@ -1,14 +1,12 @@
-use std::path::PathBuf;
+use std::io::Read;
 
 use arga_core::crdt::{DataFrame, Version};
-use memchr::memchr_iter;
-use memmap2::Mmap;
 use serde::de::DeserializeOwned;
-use tracing::info;
 use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::errors::Error;
+
 
 pub trait IntoFrame {
     type Atom;
@@ -33,12 +31,13 @@ pub trait FrameReader {
     type Atom;
 }
 
-impl<R> FrameReader for CsvReader<R>
+impl<T, R> FrameReader for CsvReader<T, R>
 where
-    R: DeserializeOwned + IntoFrame,
-    R::Atom: Default,
+    T: DeserializeOwned + IntoFrame,
+    T::Atom: Default,
+    R: Read,
 {
-    type Atom = R::Atom;
+    type Atom = T::Atom;
 }
 
 /// A reader that parses a CSV file and decomposes the row into operation logs.
@@ -47,32 +46,32 @@ where
 /// that the order of rows are not guarantee and a frame of operation logs should
 /// be contained in one row, with each frame considered a separate transaction and
 /// thus a separate 'change' entry.
-pub struct CsvReader<R> {
+pub struct CsvReader<T, R: Read> {
     pub dataset_version_id: Uuid,
     pub total_rows: usize,
     last_version: Version,
-    reader: csv::Reader<std::fs::File>,
-    phantom_record: std::marker::PhantomData<R>,
+    reader: csv::Reader<R>,
+    phantom_record: std::marker::PhantomData<T>,
 }
 
-impl<R> CsvReader<R>
+impl<T, R> CsvReader<T, R>
 where
-    R: DeserializeOwned + IntoFrame,
-    R::Atom: Default,
+    T: DeserializeOwned + IntoFrame,
+    T::Atom: Default,
+    R: Read,
 {
-    pub fn from_path(path: PathBuf, dataset_version_id: Uuid) -> Result<CsvReader<R>, Error> {
-        let total_rows = Self::total_rows(&path)?;
+    pub fn from_reader(reader: R, dataset_version_id: Uuid) -> Result<CsvReader<T, R>, Error> {
         Ok(CsvReader {
-            reader: csv::Reader::from_path(&path)?,
-            total_rows,
+            reader: csv::Reader::from_reader(reader),
+            total_rows: 0,
             last_version: Version::new(),
             dataset_version_id,
             phantom_record: std::marker::PhantomData,
         })
     }
 
-    pub fn next_frame(&mut self) -> Option<Result<DataFrame<R::Atom>, Error>> {
-        let row = self.reader.deserialize::<R>().next();
+    pub fn next_frame(&mut self) -> Option<Result<DataFrame<T::Atom>, Error>> {
+        let row = self.reader.deserialize::<T>().next();
         match row {
             Some(Err(err)) => Some(Err(err.into())),
             Some(Ok(record)) => {
@@ -89,27 +88,15 @@ where
             None => None,
         }
     }
-
-    fn total_rows(path: &PathBuf) -> Result<usize, Error> {
-        info!(?path, "Memory mapping file");
-        let file = std::fs::File::open(path)?;
-        let mmap = unsafe { Mmap::map(&file)? };
-
-        let mut total = 0;
-        for _ in memchr_iter(b'\n', &mmap) {
-            total += 1
-        }
-
-        Ok(total)
-    }
 }
 
-impl<R> Iterator for CsvReader<R>
+impl<T, R> Iterator for CsvReader<T, R>
 where
-    R: DeserializeOwned + IntoFrame,
-    R::Atom: Default,
+    T: DeserializeOwned + IntoFrame,
+    T::Atom: Default,
+    R: Read,
 {
-    type Item = Result<DataFrame<R::Atom>, Error>;
+    type Item = Result<DataFrame<T::Atom>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_frame()
