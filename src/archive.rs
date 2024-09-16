@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::errors::{Error, ParseError};
 use crate::readers::meta::Meta;
-use crate::{loggers, ProgressStream};
+use crate::{loggers, upsert_meta, ProgressStream};
 
 
 #[derive(Debug)]
@@ -66,7 +66,8 @@ impl Archive {
 
     pub fn import(&self) -> Result<(), Error> {
         let meta = self.meta()?;
-        info!(name = meta.dataset.short_name, version = meta.dataset.version, "Found dataset");
+        info!(name = meta.dataset.short_name, version = meta.dataset.version, "Upserting dataset");
+        upsert_meta(meta.clone())?;
 
         let file = File::open(&self.path)?;
         let mut archive = tar::Archive::new(file);

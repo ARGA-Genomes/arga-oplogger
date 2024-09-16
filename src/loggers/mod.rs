@@ -12,8 +12,10 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use arga_core::crdt::DataFrameOperation;
-use arga_core::models::LogOperation;
+use arga_core::models::{self, LogOperation};
+use arga_core::schema;
 pub use collections::Collections;
+use diesel::*;
 use indicatif::ProgressBarIter;
 pub use nomenclatural_acts::NomenclaturalActs;
 use rayon::prelude::*;
@@ -171,5 +173,50 @@ where
     }
 
     bars.finish();
+    Ok(())
+}
+
+
+pub fn upsert_meta(meta: meta::Meta) -> Result<(), Error> {
+    use diesel::upsert::excluded;
+    use schema::{datasets, sources};
+
+    let pool = get_pool()?;
+    let mut conn = pool.get()?;
+
+    let package = models::Source::from(meta.clone());
+    let mut dataset = models::Dataset::from(meta);
+
+    let package_id = diesel::insert_into(sources::table)
+        .values(package)
+        .on_conflict(sources::name)
+        .do_update()
+        .set((
+            sources::name.eq(excluded(sources::name)),
+            sources::author.eq(excluded(sources::author)),
+            sources::rights_holder.eq(excluded(sources::rights_holder)),
+            sources::access_rights.eq(excluded(sources::access_rights)),
+            sources::license.eq(excluded(sources::license)),
+        ))
+        .returning(sources::id)
+        .get_result::<Uuid>(&mut conn)?;
+
+    dataset.source_id = package_id;
+
+    diesel::insert_into(datasets::table)
+        .values(dataset)
+        .on_conflict(datasets::global_id)
+        .do_update()
+        .set((
+            datasets::name.eq(excluded(datasets::name)),
+            datasets::short_name.eq(excluded(datasets::short_name)),
+            datasets::url.eq(excluded(datasets::url)),
+            datasets::citation.eq(excluded(datasets::citation)),
+            datasets::license.eq(excluded(datasets::license)),
+            datasets::rights_holder.eq(excluded(datasets::rights_holder)),
+            datasets::updated_at.eq(excluded(datasets::updated_at)),
+        ))
+        .execute(&mut conn)?;
+
     Ok(())
 }

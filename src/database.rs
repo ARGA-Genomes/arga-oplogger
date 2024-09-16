@@ -69,6 +69,7 @@ fn find_dataset_id(dataset_id: &str) -> Result<Uuid, Error> {
 pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str) -> Result<DatasetVersion, Error> {
     use schema::dataset_versions;
 
+    info!(dataset_id, version, created_at, "Creating dataset version");
     let pool = get_pool()?;
     let mut conn = pool.get()?;
 

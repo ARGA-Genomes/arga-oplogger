@@ -1,7 +1,10 @@
+use arga_core::models;
+use chrono::Utc;
 use serde::Deserialize;
+use uuid::Uuid;
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Meta {
     pub dataset: Dataset,
     pub changelog: Changelog,
@@ -9,7 +12,7 @@ pub struct Meta {
     pub collection: Collection,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Dataset {
     pub id: String,
     pub name: String,
@@ -20,12 +23,12 @@ pub struct Dataset {
     pub url: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Changelog {
     pub notes: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Attribution {
     pub citation: String,
     pub source_url: String,
@@ -33,11 +36,44 @@ pub struct Attribution {
     pub rights_holder: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Collection {
     pub name: String,
     pub author: String,
     pub license: String,
     pub rights_holder: String,
     pub access_rights: String,
+}
+
+
+impl From<Meta> for models::Source {
+    fn from(meta: Meta) -> Self {
+        models::Source {
+            id: Uuid::new_v4(),
+            name: meta.collection.name,
+            author: meta.collection.author,
+            rights_holder: meta.collection.rights_holder,
+            access_rights: meta.collection.access_rights,
+            license: meta.collection.license,
+        }
+    }
+}
+
+impl From<Meta> for models::Dataset {
+    fn from(meta: Meta) -> Self {
+        models::Dataset {
+            id: Uuid::new_v4(),
+            source_id: Uuid::default(),
+            global_id: meta.dataset.id,
+            name: meta.dataset.name,
+            short_name: Some(meta.dataset.short_name),
+            description: None,
+            url: Some(meta.dataset.url),
+            citation: Some(meta.attribution.citation),
+            license: Some(meta.attribution.license),
+            rights_holder: Some(meta.attribution.rights_holder),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
 }
