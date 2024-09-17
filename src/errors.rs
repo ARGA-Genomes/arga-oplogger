@@ -14,6 +14,9 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    XmlParser(#[from] quick_xml::Error),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -29,4 +32,7 @@ pub enum ParseError {
 
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
+
+    #[error("cannot find element: {0}")]
+    NotFound(String),
 }
