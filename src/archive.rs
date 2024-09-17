@@ -84,7 +84,7 @@ impl Archive {
             match import_type {
                 ImportType::Unknown => info!("Unknown type, skipping"),
                 ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
-                ImportType::TaxonomicActs => todo!(),
+                ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
                 ImportType::NomenclaturalActs => todo!(),
                 ImportType::Collections => todo!(),
                 ImportType::Sequences => todo!(),
