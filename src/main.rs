@@ -1,3 +1,4 @@
+mod archive;
 mod database;
 mod errors;
 mod loggers;
@@ -23,9 +24,12 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 pub enum Commands {
+    /// Process and import an ARGA dataset archive as operation logs
+    Import { path: PathBuf },
+
     /// Process and import a csv as operation logs
     #[command(subcommand)]
-    Import(ImportCommand),
+    ImportFile(ImportCommand),
 
     /// Reduce operation logs and output as an ARGA CSV
     #[command(subcommand)]
@@ -102,7 +106,11 @@ fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Import(cmd) => match cmd {
+        Commands::Import { path } => {
+            let archive = archive::Archive::new(path.clone());
+            archive.import()?;
+        }
+        Commands::ImportFile(cmd) => match cmd {
             ImportCommand::Taxa(args) => {
                 let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let taxa = Taxa {

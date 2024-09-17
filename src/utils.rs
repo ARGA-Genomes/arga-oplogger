@@ -11,6 +11,7 @@ use crate::errors::ParseError;
 pub static PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {human_pos:>7}/{human_len:7} {msg}";
 pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {msg}";
 pub static SPINNER_TOTALS_TEMPLATE: &str = "{spinner:2.cyan/blue} {msg}: {human_pos}";
+pub static BYTES_PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {decimal_bytes:>7}/{decimal_total_bytes:7} @ {decimal_bytes_per_sec} [eta: {eta}] {msg}";
 
 
 #[macro_export]
@@ -40,6 +41,13 @@ pub fn new_progress_bar(total: usize, message: &str) -> ProgressBar {
         .with_style(style)
 }
 
+pub fn new_progress_bar_bytes(total: usize, message: &str) -> ProgressBar {
+    let style = ProgressStyle::with_template(BYTES_PROGRESS_TEMPLATE).expect("Invalid progress bar template");
+    ProgressBar::new(total as u64)
+        .with_message(message.to_string())
+        .with_style(style)
+}
+
 pub fn new_spinner_totals(message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(SPINNER_TOTALS_TEMPLATE).expect("Invalid spinner template");
     let spinner = ProgressBar::new_spinner()
@@ -51,35 +59,43 @@ pub fn new_spinner_totals(message: &str) -> ProgressBar {
 }
 
 
+#[derive(Clone)]
 pub struct FrameImportBars {
     _bars: MultiProgress,
-    pub total: ProgressBar,
+    pub bytes: ProgressBar,
     pub operations: ProgressBar,
     pub inserted: ProgressBar,
+    pub frames: ProgressBar,
 }
 
 impl FrameImportBars {
-    pub fn new(total: usize) -> FrameImportBars {
+    pub fn new(total_bytes: usize) -> FrameImportBars {
         let bars = MultiProgress::new();
-        let total = new_progress_bar(total, "Importing frames");
+        let bytes = new_progress_bar_bytes(total_bytes, "Importing");
         let operations = new_spinner_totals("Total operations");
         let inserted = new_spinner_totals("Operations inserted");
-        bars.add(total.clone());
+        let frames = new_spinner_totals("Frames read");
+        bars.add(bytes.clone());
         bars.add(operations.clone());
         bars.add(inserted.clone());
+        bars.add(frames.clone());
+
+        bytes.enable_steady_tick(Duration::from_millis(200));
 
         FrameImportBars {
             _bars: bars,
-            total,
+            bytes,
             operations,
             inserted,
+            frames,
         }
     }
 
     pub fn finish(&self) {
-        self.total.finish();
+        self.bytes.finish();
         self.operations.finish();
         self.inserted.finish();
+        self.frames.finish();
     }
 }
 
