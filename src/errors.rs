@@ -23,4 +23,10 @@ pub enum ParseError {
 
     #[error(transparent)]
     DateFormat(#[from] chrono::ParseError),
+
+    #[error("invalid archive: could not find {0}")]
+    FileNotFound(String),
+
+    #[error(transparent)]
+    Toml(#[from] toml::de::Error),
 }

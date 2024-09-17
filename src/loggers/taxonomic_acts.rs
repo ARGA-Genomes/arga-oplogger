@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::io::Read;
 use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
@@ -21,11 +22,11 @@ use uuid::Uuid;
 
 use crate::database::{dataset_lookup, get_pool, taxon_lookup, FrameLoader};
 use crate::errors::Error;
-use crate::frame_push_opt;
 use crate::operations::group_operations;
 use crate::readers::csv::IntoFrame;
-use crate::readers::OperationLoader;
+use crate::readers::{meta, OperationLoader};
 use crate::utils::{date_time_from_str_opt, new_progress_bar, new_spinner, taxonomic_status_from_str};
+use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
 type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
 
@@ -151,6 +152,12 @@ pub struct TaxonomicAct {
     publication_date: Option<String>,
     source_url: Option<String>,
 }
+
+
+pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Result<(), Error> {
+    import_compressed_csv_stream::<S, Record, TaxonomicActOperation>(stream, dataset)
+}
+
 
 pub struct TaxonomicActs {
     pub path: PathBuf,

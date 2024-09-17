@@ -89,7 +89,7 @@ where
             // because merging uses the last-write-wins map for reduction it still returns
             // the existing operations. because this is a distinct operation iterator we
             // want to remove the existing ops from the merged set
-            let changes = merged.into_iter().filter(|op| !ids.contains(&op.id())).collect();
+            let changes = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
             Ok(changes)
         }
     }
@@ -134,7 +134,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let frames: Vec<Result<DataFrame<R::Atom>, Error>> = self.stream.by_ref().take(self.chunk_size).collect();
-        if frames.len() > 0 {
+        if !frames.is_empty() {
             Some(Frames::new(frames))
         }
         else {
