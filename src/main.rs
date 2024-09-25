@@ -100,6 +100,12 @@ pub enum ImportCommand {
         /// The path to the CSV file to import as operation logs
         path: PathBuf,
     },
+
+    /// Import sources from a CSV dataset
+    Sources { path: PathBuf },
+
+    /// Import datasets from a CSV dataset
+    Datasets { path: PathBuf },
 }
 
 #[derive(clap::Subcommand)]
@@ -199,6 +205,11 @@ fn main() -> Result<(), Error> {
                     dataset_version_id: dataset_version.id,
                 };
                 sequences.import()?
+            }
+
+            ImportCommand::Sources { path: &PathBuf } => {
+                let sources: Sources = Sources { path: path.clone() };
+                sources.import()?
             }
         },
         Commands::Reduce(cmd) => match cmd {
