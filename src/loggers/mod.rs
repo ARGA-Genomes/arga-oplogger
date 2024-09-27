@@ -1,10 +1,11 @@
 pub mod collections;
+pub mod datasets;
 pub mod names;
 pub mod nomenclatural_acts;
 pub mod sequences;
+pub mod sources;
 pub mod taxa;
 pub mod taxonomic_acts;
-
 
 use std::fs::File;
 use std::io::Read;
@@ -32,7 +33,6 @@ use crate::readers::csv::{CsvReader, IntoFrame};
 use crate::readers::{meta, OperationLoader};
 use crate::utils::FrameImportBars;
 
-
 pub trait FrameProgress {
     fn bars(&self) -> FrameImportBars;
 }
@@ -42,7 +42,6 @@ impl<S: Read + FrameProgress> FrameProgress for brotli::Decompressor<S> {
         self.get_ref().bars()
     }
 }
-
 
 pub struct ProgressStream<S: Read> {
     stream: ProgressBarIter<S>,
@@ -69,7 +68,6 @@ impl<S: Read> Read for ProgressStream<S> {
     }
 }
 
-
 /// A parallel CSV framer and importer.
 ///
 /// This caters for the general path of importing operations logs from a CSV file by treating each
@@ -94,7 +92,6 @@ where
     import_csv_from_stream::<T, Op, _>(stream, dataset_version_id)?;
     Ok(())
 }
-
 
 /// Imports a CSV stream that has been compressed.
 ///
@@ -175,7 +172,6 @@ where
     bars.finish();
     Ok(())
 }
-
 
 pub fn upsert_meta(meta: meta::Meta) -> Result<(), Error> {
     use diesel::upsert::excluded;

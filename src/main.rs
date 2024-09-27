@@ -13,6 +13,9 @@ use database::create_dataset_version;
 use errors::Error;
 use loggers::*;
 
+use crate::datasets::Datasets;
+use crate::sources::Sources;
+
 /// The ARGA operation logger
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -207,9 +210,14 @@ fn main() -> Result<(), Error> {
                 sequences.import()?
             }
 
-            ImportCommand::Sources { path: &PathBuf } => {
-                let sources: Sources = Sources { path: path.clone() };
+            ImportCommand::Sources { path } => {
+                let sources = Sources { path: path.clone() };
                 sources.import()?
+            }
+
+            ImportCommand::Datasets { path } => {
+                let datasets = Datasets { path: path.clone() };
+                datasets.import()?
             }
         },
         Commands::Reduce(cmd) => match cmd {
