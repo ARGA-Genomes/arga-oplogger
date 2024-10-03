@@ -10,6 +10,7 @@ use diesel::*;
 
 use crate::database::get_pool;
 use crate::errors::Error;
+use crate::utils::{access_pill_status_from_str, content_type_from_str, data_reuse_status_from_str};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -19,21 +20,28 @@ pub struct Sources {
 
 #[derive(Deserialize)]
 struct CSVRecord {
-    id: Uuid,
     name: String,
     author: String,
     license: String,
+
+    #[serde(deserialize_with = "data_reuse_status_from_str")]
     reuse_pill: Option<DataReuseStatus>,
+
     access_rights: String,
+
+    #[serde(deserialize_with = "access_pill_status_from_str")]
     access_pill: Option<AccessRightsStatus>,
+
     rights_holder: String,
+
+    #[serde(deserialize_with = "content_type_from_str")]
     content_type: Option<SourceContentType>,
 }
 
 impl From<CSVRecord> for Source {
     fn from(value: CSVRecord) -> Source {
         Source {
-            id: value.id,
+            id: Uuid::new_v4(),
             name: value.name,
             author: value.author,
             rights_holder: value.rights_holder,

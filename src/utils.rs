@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use arga_core::models::{NomenclaturalActType, TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{
+    AccessRightsStatus, DataReuseStatus, NomenclaturalActType, SourceContentType, TaxonomicRank, TaxonomicStatus,
+};
 use chrono::{DateTime, Utc};
 use heck::ToTitleCase;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -13,7 +15,6 @@ pub static SPINNER_TEMPLATE: &str = "[{elapsed_precise}] {spinner:2.cyan/blue} {
 pub static SPINNER_TOTALS_TEMPLATE: &str = "{spinner:2.cyan/blue} {msg}: {human_pos}";
 pub static BYTES_PROGRESS_TEMPLATE: &str = "[{elapsed_precise}] {bar:40.cyan/blue} {decimal_bytes:>7}/{decimal_total_bytes:7} @ {decimal_bytes_per_sec} [eta: {eta}] {msg}";
 
-
 #[macro_export]
 macro_rules! frame_push_opt {
     ($frame:ident, $discriminant:ident, $field:expr) => {
@@ -22,7 +23,6 @@ macro_rules! frame_push_opt {
         }
     };
 }
-
 
 pub fn new_spinner(message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
@@ -57,7 +57,6 @@ pub fn new_spinner_totals(message: &str) -> ProgressBar {
     spinner.enable_steady_tick(Duration::from_millis(100));
     spinner
 }
-
 
 #[derive(Clone)]
 pub struct FrameImportBars {
@@ -98,7 +97,6 @@ impl FrameImportBars {
         self.frames.finish();
     }
 }
-
 
 /// Convert the case of the first word to a title case.
 /// This will also replace all unicode whitespaces with ASCII compatible whitespace
@@ -379,4 +377,96 @@ where
             Err(_) => None,
         },
     })
+}
+
+pub fn data_reuse_status_from_str<'de, D>(deserializer: D) -> Result<Option<DataReuseStatus>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    str_to_data_reuse_status(&s).map_err(serde::de::Error::custom)
+}
+
+pub fn str_to_data_reuse_status(value: &str) -> Result<Option<DataReuseStatus>, ParseError> {
+    // use DataReuseStatus::*;
+
+    match value.to_lowercase().as_str() {
+        "limited" => Ok(Some(DataReuseStatus::Limited)),
+        "unlimited" => Ok(Some(DataReuseStatus::Unlimited)),
+        "none" => Ok(Some(DataReuseStatus::None)),
+        "variable" => Ok(Some(DataReuseStatus::Variable)),
+        "" => Ok(None),
+
+        val => Err(ParseError::InvalidValue(val.to_string())),
+    }
+}
+
+pub fn access_pill_status_from_str<'de, D>(deserializer: D) -> Result<Option<AccessRightsStatus>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    str_to_access_pill_status(&s).map_err(serde::de::Error::custom)
+}
+
+pub fn str_to_access_pill_status(value: &str) -> Result<Option<AccessRightsStatus>, ParseError> {
+    use AccessRightsStatus::*;
+
+    match value.to_lowercase().as_str() {
+        "open" => Ok(Some(Open)),
+        "restricted" => Ok(Some(Restricted)),
+        "conditional" => Ok(Some(Conditional)),
+        "variable" => Ok(Some(Variable)),
+        "" => Ok(None),
+
+        val => Err(ParseError::InvalidValue(val.to_string())),
+    }
+}
+
+pub fn content_type_from_str<'de, D>(deserializer: D) -> Result<Option<SourceContentType>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    str_to_content_type(&s).map_err(serde::de::Error::custom)
+}
+
+pub fn str_to_content_type(value: &str) -> Result<Option<SourceContentType>, ParseError> {
+    use SourceContentType::*;
+
+    match value.to_lowercase().as_str() {
+        "Taxonomic Backbone" => Ok(Some(TaxonomicBackbone)),
+        "taxonomic backbone" => Ok(Some(TaxonomicBackbone)),
+
+        "Ecological Traits" => Ok(Some(EcologicalTraits)),
+        "ecological traits" => Ok(Some(EcologicalTraits)),
+
+        "Genomic Data" => Ok(Some(GenomicData)),
+        "genomic data" => Ok(Some(GenomicData)),
+
+        "Specimens" => Ok(Some(Specimens)),
+        "specimens" => Ok(Some(Specimens)),
+
+        "Non-genomic Data" => Ok(Some(NongenomicData)),
+        "non-genomic data" => Ok(Some(NongenomicData)),
+
+        "Morphological Traits" => Ok(Some(MorphologicalTraits)),
+        "morphological traits" => Ok(Some(MorphologicalTraits)),
+
+        "Biochemical Traits" => Ok(Some(BiochemicalTraits)),
+        "biochemical traits" => Ok(Some(BiochemicalTraits)),
+
+        "Mixed datatypes" => Ok(Some(MixedDatatypes)),
+        "mixed datatypes" => Ok(Some(MixedDatatypes)),
+
+        "Functional Traits" => Ok(Some(FunctionalTraits)),
+        "functional traits" => Ok(Some(FunctionalTraits)),
+
+        "Ethnobiology" => Ok(Some(Ethnobiology)),
+        "ethnobiology" => Ok(Some(Ethnobiology)),
+
+        "" => Ok(None),
+
+        val => Err(ParseError::InvalidValue(val.to_string())),
+    }
 }
