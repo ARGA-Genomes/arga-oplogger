@@ -14,6 +14,9 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -29,4 +32,10 @@ pub enum ParseError {
 
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum LookupError {
+    #[error("cannot find source in database: {0}")]
+    Source(String),
 }

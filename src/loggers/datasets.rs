@@ -3,12 +3,14 @@ use arga_core::{models, schema};
 use diesel::*;
 use std::path::PathBuf;
 
-use crate::database::get_pool;
+use crate::database::{get_pool, source_lookup};
 use crate::errors::Error;
+use crate::utils::{access_pill_status_from_str, content_type_from_str, data_reuse_status_from_str};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::errors::LookupError;
 use arga_core::models::AccessRightsStatus;
 use arga_core::models::DataReuseStatus;
 use arga_core::models::Dataset;
@@ -20,33 +22,37 @@ pub struct Datasets {
 
 #[derive(Deserialize)]
 struct CSVRecord {
-    id: Uuid,
-    source_id: Uuid,
+    source_name: String,
     global_id: String,
     name: String,
     short_name: Option<String>,
-    description: Option<String>,
     url: Option<String>,
     citation: Option<String>,
     license: Option<String>,
     rights_holder: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+
+    #[serde(deserialize_with = "data_reuse_status_from_str")]
     reuse_pill: Option<DataReuseStatus>,
+
+    #[serde(deserialize_with = "access_pill_status_from_str")]
     access_pill: Option<AccessRightsStatus>,
     publication_year: Option<i16>,
+
+    #[serde(deserialize_with = "content_type_from_str")]
     content_type: Option<SourceContentType>,
 }
 
 impl From<CSVRecord> for Dataset {
     fn from(value: CSVRecord) -> Dataset {
         Dataset {
-            id: value.id,
-            source_id: value.source_id,
+            id: Uuid::new_v4(),
+            source_id: get_source_id(value.source_name).unwrap(),
             global_id: value.global_id,
             name: value.name,
             short_name: value.short_name,
-            description: value.description,
+            description: None,
             url: value.url,
             citation: value.citation,
             license: value.license,
@@ -59,6 +65,17 @@ impl From<CSVRecord> for Dataset {
             content_type: value.content_type,
         }
     }
+}
+
+fn get_source_id(source_name: String) -> Result<Uuid, Error> {
+    let mut pool = get_pool()?;
+    let sources = source_lookup(&mut pool)?;
+
+    let source_uuid = sources
+        .get(&source_name)
+        .ok_or_else(|| Error::Lookup(LookupError::Source(source_name)))?;
+
+    Ok(*source_uuid)
 }
 
 impl Datasets {
@@ -82,6 +99,7 @@ impl Datasets {
                 .on_conflict(datasets::name)
                 .do_update()
                 .set((
+                    datasets::source_id.eq(excluded(datasets::source_id)),
                     datasets::global_id.eq(excluded(datasets::global_id)),
                     datasets::short_name.eq(excluded(datasets::short_name)),
                     datasets::description.eq(excluded(datasets::description)),
