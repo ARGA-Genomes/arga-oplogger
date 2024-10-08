@@ -20,7 +20,7 @@ pub struct Datasets {
     pub path: PathBuf,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct CSVRecord {
     source_name: String,
     global_id: String,
@@ -28,18 +28,16 @@ struct CSVRecord {
     short_name: Option<String>,
     url: Option<String>,
     citation: Option<String>,
+    description: Option<String>,
     license: Option<String>,
     rights_holder: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-
     #[serde(deserialize_with = "data_reuse_status_from_str")]
     reuse_pill: Option<DataReuseStatus>,
-
     #[serde(deserialize_with = "access_pill_status_from_str")]
     access_pill: Option<AccessRightsStatus>,
     publication_year: Option<i16>,
-
     #[serde(deserialize_with = "content_type_from_str")]
     content_type: Option<SourceContentType>,
 }
@@ -48,7 +46,7 @@ impl From<CSVRecord> for Dataset {
     fn from(value: CSVRecord) -> Dataset {
         Dataset {
             id: Uuid::new_v4(),
-            source_id: get_source_id(value.source_name).unwrap(),
+            source_id: get_source_id(&value.source_name).unwrap(),
             global_id: value.global_id,
             name: value.name,
             short_name: value.short_name,
@@ -67,13 +65,13 @@ impl From<CSVRecord> for Dataset {
     }
 }
 
-fn get_source_id(source_name: String) -> Result<Uuid, Error> {
+fn get_source_id(source_name: &str) -> Result<Uuid, Error> {
     let mut pool = get_pool()?;
     let sources = source_lookup(&mut pool)?;
 
     let source_uuid = sources
-        .get(&source_name)
-        .ok_or_else(|| Error::Lookup(LookupError::Source(source_name)))?;
+        .get(source_name)
+        .ok_or_else(|| Error::Lookup(LookupError::Source(source_name.to_string())))?;
 
     Ok(*source_uuid)
 }
@@ -96,7 +94,7 @@ impl Datasets {
 
             diesel::insert_into(datasets::table)
                 .values(&dataset_record)
-                .on_conflict(datasets::name)
+                .on_conflict(datasets::global_id)
                 .do_update()
                 .set((
                     datasets::source_id.eq(excluded(datasets::source_id)),

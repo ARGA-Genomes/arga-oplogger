@@ -464,6 +464,8 @@ pub fn str_to_content_type(value: &str) -> Result<Option<SourceContentType>, Par
 
         "Ethnobiology" => Ok(Some(Ethnobiology)),
         "ethnobiology" => Ok(Some(Ethnobiology)),
+        "Ethnobiological Traits" => Ok(Some(Ethnobiology)),
+        "ethnobiological traits" => Ok(Some(Ethnobiology)),
 
         "" => Ok(None),
 
