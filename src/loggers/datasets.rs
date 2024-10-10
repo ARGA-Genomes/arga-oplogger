@@ -46,7 +46,7 @@ impl From<CSVRecord> for Dataset {
     fn from(value: CSVRecord) -> Dataset {
         Dataset {
             id: Uuid::new_v4(),
-            source_id: get_source_id(&value.source_name).unwrap(),
+            source_id: Uuid::new_v4(),
             global_id: value.global_id,
             name: value.name,
             short_name: value.short_name,
@@ -65,17 +65,6 @@ impl From<CSVRecord> for Dataset {
     }
 }
 
-fn get_source_id(source_name: &str) -> Result<Uuid, Error> {
-    let mut pool = get_pool()?;
-    let sources = source_lookup(&mut pool)?;
-
-    let source_uuid = sources
-        .get(source_name)
-        .ok_or_else(|| Error::Lookup(LookupError::Source(source_name.to_string())))?;
-
-    Ok(*source_uuid)
-}
-
 impl Datasets {
     /// Import datasets if they are not already in the table. This is an upsert and will
     /// update the data if it matches on dataset name.
@@ -85,12 +74,25 @@ impl Datasets {
         let mut reader = csv::Reader::from_path(&self.path)?;
         let records = reader.deserialize();
 
-        let pool = get_pool()?;
+        let mut pool = get_pool()?;
         let mut conn = pool.get()?;
+
+        let sources = source_lookup(&mut pool)?;
 
         for result in records {
             let record: CSVRecord = result?;
-            let dataset_record = Dataset::from(record);
+
+            // Borrow the source_name before moving record
+            let source_name = record.source_name.clone();
+
+            let mut dataset_record = Dataset::from(record);
+
+            if let Some(source_id) = sources.get(&source_name) {
+                dataset_record.source_id = *source_id; // Dereference the Option<&Uuid>
+            } else {
+                // Handle the case where the source is not found
+                return Err(Error::Lookup(LookupError::Source(source_name.to_string())));
+            }
 
             diesel::insert_into(datasets::table)
                 .values(&dataset_record)
