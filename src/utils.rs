@@ -1,7 +1,12 @@
 use std::time::Duration;
 
 use arga_core::models::{
-    AccessRightsStatus, DataReuseStatus, NomenclaturalActType, SourceContentType, TaxonomicRank, TaxonomicStatus,
+    AccessRightsStatus,
+    DataReuseStatus,
+    NomenclaturalActType,
+    SourceContentType,
+    TaxonomicRank,
+    TaxonomicStatus,
 };
 use chrono::{DateTime, Utc};
 use heck::ToTitleCase;
@@ -435,40 +440,18 @@ pub fn str_to_content_type(value: &str) -> Result<Option<SourceContentType>, Par
     use SourceContentType::*;
 
     match value.to_lowercase().as_str() {
-        "Taxonomic Backbone" => Ok(Some(TaxonomicBackbone)),
         "taxonomic backbone" => Ok(Some(TaxonomicBackbone)),
-
-        "Ecological Traits" => Ok(Some(EcologicalTraits)),
         "ecological traits" => Ok(Some(EcologicalTraits)),
-
-        "Genomic Data" => Ok(Some(GenomicData)),
         "genomic data" => Ok(Some(GenomicData)),
-
-        "Specimens" => Ok(Some(Specimens)),
         "specimens" => Ok(Some(Specimens)),
-
-        "Non-genomic Data" => Ok(Some(NongenomicData)),
         "non-genomic data" => Ok(Some(NongenomicData)),
-
-        "Morphological Traits" => Ok(Some(MorphologicalTraits)),
         "morphological traits" => Ok(Some(MorphologicalTraits)),
-
-        "Biochemical Traits" => Ok(Some(BiochemicalTraits)),
         "biochemical traits" => Ok(Some(BiochemicalTraits)),
-
-        "Mixed datatypes" => Ok(Some(MixedDatatypes)),
         "mixed datatypes" => Ok(Some(MixedDatatypes)),
-
-        "Functional Traits" => Ok(Some(FunctionalTraits)),
         "functional traits" => Ok(Some(FunctionalTraits)),
-
-        "Ethnobiology" => Ok(Some(Ethnobiology)),
         "ethnobiology" => Ok(Some(Ethnobiology)),
-        "Ethnobiological Traits" => Ok(Some(Ethnobiology)),
         "ethnobiological traits" => Ok(Some(Ethnobiology)),
-
         "" => Ok(None),
-
         val => Err(ParseError::InvalidValue(val.to_string())),
     }
 }

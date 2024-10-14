@@ -1,10 +1,8 @@
 use arga_core::models;
-use arga_core::models::AccessRightsStatus;
-use arga_core::models::DataReuseStatus;
-use arga_core::models::SourceContentType;
 use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;
+
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Meta {
@@ -23,10 +21,6 @@ pub struct Dataset {
     /// RFC 3339
     pub published_at: toml::value::Datetime,
     pub url: String,
-    pub reuse_pill: Option<DataReuseStatus>,
-    pub access_pill: Option<AccessRightsStatus>,
-    pub publication_year: Option<i16>,
-    pub content_type: Option<SourceContentType>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -49,10 +43,8 @@ pub struct Collection {
     pub license: String,
     pub rights_holder: String,
     pub access_rights: String,
-    pub reuse_pill: Option<DataReuseStatus>,
-    pub access_pill: Option<AccessRightsStatus>,
-    pub content_type: Option<SourceContentType>,
 }
+
 
 impl From<Meta> for models::Source {
     fn from(meta: Meta) -> Self {
@@ -63,9 +55,9 @@ impl From<Meta> for models::Source {
             rights_holder: meta.collection.rights_holder,
             access_rights: meta.collection.access_rights,
             license: meta.collection.license,
-            reuse_pill: meta.collection.reuse_pill,
-            access_pill: meta.collection.access_pill,
-            content_type: meta.collection.content_type,
+            reuse_pill: None,
+            access_pill: None,
+            content_type: None,
         }
     }
 }
@@ -85,10 +77,10 @@ impl From<Meta> for models::Dataset {
             rights_holder: Some(meta.attribution.rights_holder),
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            reuse_pill: meta.dataset.reuse_pill,
-            access_pill: meta.dataset.access_pill,
-            publication_year: meta.dataset.publication_year,
-            content_type: meta.dataset.content_type,
+            reuse_pill: None,
+            access_pill: None,
+            publication_year: None,
+            content_type: None,
         }
     }
 }

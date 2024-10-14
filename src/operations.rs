@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
 use arga_core::crdt::lww::Map;
-use arga_core::crdt::{DataFrame, DataFrameOperation};
+use arga_core::crdt::DataFrameOperation;
 use arga_core::models::LogOperation;
 use bigdecimal::BigDecimal;
 
 use crate::errors::Error;
-use crate::readers::csv::{FrameReader, TryIntoFrame};
 use crate::readers::OperationLoader;
 
 
@@ -92,77 +91,5 @@ where
             let changes = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
             Ok(changes)
         }
-    }
-}
-
-
-pub struct Framer<T> {
-    stream: T,
-}
-
-impl<T> Framer<T>
-where
-    T: IntoIterator,
-    <T as IntoIterator>::Item: TryIntoFrame,
-    <<T as IntoIterator>::Item as TryIntoFrame>::Atom: Default,
-{
-    pub fn new(stream: T) -> Framer<T> {
-        Framer { stream }
-    }
-
-    pub fn chunks(self, chunk_size: usize) -> FrameChunks<T> {
-        FrameChunks {
-            stream: self.stream,
-            chunk_size,
-        }
-    }
-}
-
-
-pub struct FrameChunks<R> {
-    stream: R,
-    chunk_size: usize,
-}
-
-impl<R> Iterator for FrameChunks<R>
-where
-    R: FrameReader,
-    R::Atom: Default,
-    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
-{
-    type Item = Frames<R::Atom>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let frames: Vec<Result<DataFrame<R::Atom>, Error>> = self.stream.by_ref().take(self.chunk_size).collect();
-        if !frames.is_empty() {
-            Some(Frames::new(frames))
-        }
-        else {
-            None
-        }
-    }
-}
-
-
-pub struct Frames<A>(Vec<Result<DataFrame<A>, Error>>);
-
-impl<A: Default> Frames<A> {
-    pub fn new(frames: Vec<Result<DataFrame<A>, Error>>) -> Frames<A> {
-        Frames(frames)
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn operations<Op>(self) -> Result<Vec<Op>, Error>
-    where
-        Op: From<DataFrameOperation<A>>,
-    {
-        let mut ops: Vec<Op> = Vec::new();
-        for frame in self.0 {
-            ops.extend(frame?.collect());
-        }
-        Ok(ops)
     }
 }

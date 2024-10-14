@@ -5,8 +5,6 @@ edition = "2021"
 
 [dependencies]
 arga-core = { git = "https://github.com/ARGA-Genomes/arga-backend.git" }
-# for local development
-# arga-core = { path = "../arga-backend/core" }
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 brotli = "6.0.0"
 chrono = { version = "0.4.38", features = ["serde"] }
@@ -19,6 +17,7 @@ heck = "0.5.0"
 indicatif = { version = "0.17.8", features = ["rayon"] }
 memchr = "2.7.4"
 memmap2 = "0.9.4"
+quick-xml = "0.36.1"
 rayon = "1.10.0"
 serde = { version = "1.0.204", features = ["derive"] }
 tar = "0.4.41"
@@ -28,3 +27,8 @@ tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 xxhash-rust = { version = "0.8.11", features = ["xxh3"] }
+
+
+# for local development
+# [patch."https://github.com/ARGA-Genomes/arga-backend.git"]
+# arga-core = { path = "../backend/core" }

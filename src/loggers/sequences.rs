@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::database::FrameLoader;
 use crate::errors::Error;
 use crate::frame_push_opt;
-use crate::readers::csv::IntoFrame;
+use crate::frames::IntoFrame;
 use crate::readers::OperationLoader;
 
 type SequenceFrame = DataFrame<SequenceAtom>;

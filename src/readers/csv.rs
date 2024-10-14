@@ -6,30 +6,8 @@ use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
 use crate::errors::Error;
+use crate::frames::{FrameReader, IntoFrame};
 
-
-pub trait IntoFrame {
-    type Atom;
-    fn into_frame(self, frame: DataFrame<Self::Atom>) -> DataFrame<Self::Atom>;
-    fn entity_hashable(&self) -> &[u8];
-}
-
-pub trait TryIntoFrame {
-    type Atom;
-    type Error;
-}
-
-// Used by functions that take a generic reader that also has to handle
-// a iterator that returns fallable results
-impl<Atom, E> TryIntoFrame for Result<DataFrame<Atom>, E> {
-    type Atom = Atom;
-    type Error = E;
-}
-
-
-pub trait FrameReader {
-    type Atom;
-}
 
 impl<T, R> FrameReader for CsvReader<T, R>
 where

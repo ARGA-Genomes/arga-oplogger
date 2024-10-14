@@ -2,17 +2,19 @@ pub mod collections;
 pub mod datasets;
 pub mod names;
 pub mod nomenclatural_acts;
+pub mod publications;
 pub mod sequences;
 pub mod sources;
 pub mod taxa;
 pub mod taxonomic_acts;
+
 
 use std::fs::File;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
-use arga_core::crdt::DataFrameOperation;
+use arga_core::crdt::{DataFrame, DataFrameOperation};
 use arga_core::models::{self, LogOperation};
 use arga_core::schema;
 pub use collections::Collections;
@@ -28,10 +30,12 @@ use uuid::Uuid;
 
 use crate::database::{create_dataset_version, get_pool, FrameLoader};
 use crate::errors::Error;
-use crate::operations::{distinct_changes, Framer};
-use crate::readers::csv::{CsvReader, IntoFrame};
+use crate::frames::{FrameReader, Framer, IntoFrame};
+use crate::operations::distinct_changes;
+use crate::readers::csv::CsvReader;
 use crate::readers::{meta, OperationLoader};
 use crate::utils::FrameImportBars;
+
 
 pub trait FrameProgress {
     fn bars(&self) -> FrameImportBars;
@@ -42,6 +46,7 @@ impl<S: Read + FrameProgress> FrameProgress for brotli::Decompressor<S> {
         self.get_ref().bars()
     }
 }
+
 
 pub struct ProgressStream<S: Read> {
     stream: ProgressBarIter<S>,
@@ -68,6 +73,7 @@ impl<S: Read> Read for ProgressStream<S> {
     }
 }
 
+
 /// A parallel CSV framer and importer.
 ///
 /// This caters for the general path of importing operations logs from a CSV file by treating each
@@ -92,6 +98,7 @@ where
     import_csv_from_stream::<T, Op, _>(stream, dataset_version_id)?;
     Ok(())
 }
+
 
 /// Imports a CSV stream that has been compressed.
 ///
@@ -172,6 +179,89 @@ where
     bars.finish();
     Ok(())
 }
+
+/// A parallel CSV framer and importer.
+///
+/// This caters for the general path of importing operations logs from a CSV file by treating each
+/// row as a single frame and bulk upserting the distinct changes. It also displays a progress bar.
+/// Because its a generic function that relies on implemented traits it has to be called as a
+/// turbo fish function, ie. `import_csv_as_logs::<Record, TaxonOperation>(&path, &dataset_version_id)`.
+///
+/// The Record (<T>) must implement the IntoFrame trait and be deserializable from a CSV file.
+/// The Operation (<Op>) must implement the OperationLoader trait
+/// The Reader (<R>) only needs to implement std::io::Read
+pub fn import_frames_from_stream<T, Op, R>(reader: R) -> Result<(), Error>
+where
+    R: FrameReader + FrameProgress,
+    R::Atom: Default + Clone + ToString + PartialEq,
+    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
+    Op: Sync,
+    FrameLoader<Op>: OperationLoader + Clone,
+    <FrameLoader<Op> as OperationLoader>::Operation:
+        LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>> + Clone + Sync,
+{
+    let bars = reader.bars();
+
+    // we need a few components to fully import operation logs. the first is a CSV file reader
+    // which parses each row and converts it into a frame. the second is a framer which allows
+    // us to conveniently get chunks of frames from the reader and sets us up for easy parallelization.
+    // and the third is the frame loader which allows us to query the database to deduplicate and
+    // pull out unique operations, as well as upsert the new operations.
+    let framer = Framer::new(reader);
+    let loader = FrameLoader::<Op>::new(get_pool()?);
+
+    // parse and convert big chunks of rows. this is an IO bound task but for each
+    // chunk we need to query the database and then insert into the database, so
+    // we parallelize the frame merging and inserting instead since it is an order of
+    // magnitude slower than the parsing
+    for frames in framer.chunks(20_000) {
+        let total_frames = frames.len();
+
+        // we flatten out all the frames into operations and process them in chunks of 10k.
+        // postgres has a parameter limit and by chunking it we can query the database to
+        // filter to distinct changes and import it in bulk without triggering any errors.
+        frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
+            let total = slice.len();
+
+            // compare the ops with previously imported ops and only return actual changes
+            let changes = distinct_changes(slice.to_vec(), &loader)?;
+            let inserted = loader.upsert_operations(&changes)?;
+
+            bars.inserted.inc(inserted as u64);
+            bars.operations.inc(total as u64);
+            Ok::<(), Error>(())
+        })?;
+
+        bars.frames.inc(total_frames as u64);
+    }
+
+    bars.finish();
+    Ok(())
+}
+
+
+/// A helper function to concurrently import publication operations from a frame stream
+pub fn import_publications<R>(reader: R) -> Result<(), Error>
+where
+    R: FrameReader + FrameProgress,
+    R::Atom: Default + Clone + ToString + PartialEq,
+    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
+    models::PublicationOperation: LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>>,
+{
+    import_frames_from_stream::<models::PublicationAtom, models::PublicationOperation, R>(reader)
+}
+
+/// A helper function to concurrently import nomenclatural act operations from a frame stream
+pub fn import_nomenclatural_acts<R>(reader: R) -> Result<(), Error>
+where
+    R: FrameReader + FrameProgress,
+    R::Atom: Default + Clone + ToString + PartialEq,
+    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
+    models::NomenclaturalActOperation: LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>>,
+{
+    import_frames_from_stream::<models::NomenclaturalActAtom, models::NomenclaturalActOperation, R>(reader)
+}
+
 
 pub fn upsert_meta(meta: meta::Meta) -> Result<(), Error> {
     use diesel::upsert::excluded;

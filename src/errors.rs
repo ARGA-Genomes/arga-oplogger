@@ -16,6 +16,15 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
+    XmlParser(#[from] quick_xml::Error),
+
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    NomenclaturalActType(#[from] NomenclaturalActTypeError),
+
+    #[error(transparent)]
     Lookup(#[from] LookupError),
 }
 
@@ -32,6 +41,18 @@ pub enum ParseError {
 
     #[error(transparent)]
     Toml(#[from] toml::de::Error),
+
+    #[error("cannot find element: {0}")]
+    NotFound(String),
+}
+
+
+#[derive(thiserror::Error, Debug)]
+pub enum NomenclaturalActTypeError {
+    #[error("taxonomic name in nomenclatural section must have a status")]
+    TaxonomicStatusNotFound,
+    #[error("unrecognized taxonomic status: {0}")]
+    InvalidNomenclaturalActType(String),
 }
 
 #[derive(thiserror::Error, Debug)]
