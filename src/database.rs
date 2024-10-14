@@ -99,6 +99,23 @@ pub fn refresh_materialized_view(pool: &mut PgPool, name: MaterializedView) -> R
     Ok(())
 }
 
+pub fn source_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::sources::dsl::*;
+    info!("Creating source map");
+
+    let mut conn = pool.get()?;
+
+    let results: Vec<(Uuid, String)> = sources.select((id, name)).load::<(Uuid, String)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    for (uuid, lookup) in results {
+        map.insert(lookup, uuid);
+    }
+
+    info!(total = map.len(), "Creating source map finished");
+    Ok(map)
+}
+
 pub fn dataset_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::datasets::dsl::*;
     info!("Creating dataset map");

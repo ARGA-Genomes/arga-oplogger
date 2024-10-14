@@ -15,6 +15,9 @@ use errors::Error;
 use loggers::*;
 use readers::plazi;
 
+use crate::datasets::Datasets;
+use crate::sources::Sources;
+
 /// The ARGA operation logger
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -73,6 +76,12 @@ pub enum ImportCommand {
 
     /// Import sequences from a CSV dataset
     Sequences(DefaultImportArgs),
+
+    /// Import sources from a CSV dataset
+    Sources { path: PathBuf },
+
+    /// Import datasets from a CSV dataset
+    Datasets { path: PathBuf },
 }
 
 #[derive(clap::Subcommand)]
@@ -157,6 +166,16 @@ fn main() -> Result<(), Error> {
                     dataset_version_id: dataset_version.id,
                 };
                 sequences.import()?
+            }
+
+            ImportCommand::Sources { path } => {
+                let sources = Sources { path: path.clone() };
+                sources.import()?
+            }
+
+            ImportCommand::Datasets { path } => {
+                let datasets = Datasets { path: path.clone() };
+                datasets.import()?
             }
         },
         Commands::Reduce(cmd) => match cmd {

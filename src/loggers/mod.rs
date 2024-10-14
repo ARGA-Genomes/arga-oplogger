@@ -1,8 +1,10 @@
 pub mod collections;
+pub mod datasets;
 pub mod names;
 pub mod nomenclatural_acts;
 pub mod publications;
 pub mod sequences;
+pub mod sources;
 pub mod taxa;
 pub mod taxonomic_acts;
 

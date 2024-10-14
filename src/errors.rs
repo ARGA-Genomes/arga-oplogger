@@ -23,6 +23,9 @@ pub enum Error {
 
     #[error(transparent)]
     NomenclaturalActType(#[from] NomenclaturalActTypeError),
+
+    #[error(transparent)]
+    Lookup(#[from] LookupError),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -50,4 +53,10 @@ pub enum NomenclaturalActTypeError {
     TaxonomicStatusNotFound,
     #[error("unrecognized taxonomic status: {0}")]
     InvalidNomenclaturalActType(String),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum LookupError {
+    #[error("cannot find source in database: {0}")]
+    Source(String),
 }
