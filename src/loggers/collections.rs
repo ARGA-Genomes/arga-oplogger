@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::database::FrameLoader;
 use crate::errors::Error;
-use crate::readers::csv::IntoFrame;
+use crate::frames::IntoFrame;
 use crate::readers::OperationLoader;
 use crate::utils::titleize_first_word;
 

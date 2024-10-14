@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::database::{get_pool, name_lookup, name_publication_lookup, FrameLoader};
+use crate::database::{get_pool, name_lookup, name_publication_lookup, publication_lookup, FrameLoader};
 use crate::errors::Error;
 use crate::frame_push_opt;
+use crate::frames::IntoFrame;
 use crate::operations::group_operations;
-use crate::readers::csv::IntoFrame;
 use crate::readers::OperationLoader;
 use crate::utils::{new_progress_bar, new_spinner, nomenclatural_act_from_str};
 
@@ -56,28 +56,35 @@ impl OperationLoader for FrameLoader<NomenclaturalActOperation> {
 /// This is deserializeable with the serde crate and enforces expectations
 /// about what fields are mandatory and the format they should be in.
 #[derive(Debug, Clone, Deserialize)]
-struct Record {
+pub struct Record {
     /// Any value that uniquely identifies this record through its lifetime.
     /// This is a kind of global permanent identifier
-    entity_id: String,
+    pub entity_id: String,
 
     /// The name of the taxon. Should include author when possible
-    scientific_name: String,
+    pub scientific_name: String,
     /// The name of the taxon without the author
-    // canonical_name: String,
-    /// The authorship of the taxon
-    // authorship: String,
+    pub canonical_name: String,
+    /// The authorship of the name
+    pub scientific_name_authorship: Option<String>,
+
+    pub authority_name: Option<String>,
+    pub authority_year: Option<String>,
+
+    pub base_authority_name: Option<String>,
+    pub base_authority_year: Option<String>,
+
     /// The name of the taxon currently accepted. Should include author when possible
-    acted_on: Option<String>,
+    pub acted_on: Option<String>,
 
     /// The status of the taxon. Refer to TaxonomicStatus for all options
     #[serde(deserialize_with = "nomenclatural_act_from_str")]
-    act: NomenclaturalActType,
+    pub act: NomenclaturalActType,
 
-    publication: String,
-    publication_date: Option<String>,
+    pub publication: String,
+    pub publication_date: Option<String>,
 
-    source_url: String,
+    pub source_url: String,
     // citation: Option<String>,
 
     // /// The timestamp of when the record was created at the data source
@@ -101,9 +108,15 @@ impl IntoFrame for Record {
         use NomenclaturalActAtom::*;
         frame.push(EntityId(self.entity_id.clone()));
         frame.push(ScientificName(self.scientific_name));
+        frame.push(CanonicalName(self.canonical_name));
         frame.push(Act(self.act));
         frame.push(SourceUrl(self.source_url));
         frame.push(Publication(self.publication));
+        frame_push_opt!(frame, Authorship, self.scientific_name_authorship);
+        frame_push_opt!(frame, AuthorityName, self.authority_name);
+        frame_push_opt!(frame, AuthorityYear, self.authority_year);
+        frame_push_opt!(frame, BasionymAuthorityName, self.base_authority_name);
+        frame_push_opt!(frame, BasionymAuthorityYear, self.base_authority_year);
         frame_push_opt!(frame, ActedOn, self.acted_on);
         frame_push_opt!(frame, PublicationDate, self.publication_date);
         frame
@@ -120,6 +133,17 @@ pub struct NomenclaturalAct {
 
     /// The name of the taxon. Should include author when possible
     scientific_name: String,
+    /// The authorship of the name
+    scientific_name_authorship: Option<String>,
+    /// The name of the taxon without the author
+    canonical_name: String,
+
+    authority_name: Option<String>,
+    authority_year: Option<String>,
+
+    base_authority_name: Option<String>,
+    base_authority_year: Option<String>,
+
     /// The name of the taxon currently accepted. Should include author when possible
     acted_on: String,
 
@@ -203,22 +227,40 @@ impl NomenclaturalActs {
         // to the correct taxon for that system, rather than attaching an act across systems
         let reduced = Self::reduce()?;
 
+        // import all the names in case they don't already exist. we use names to
+        // hang data on including the names that a nomenclatural act describes or acts on
+        let mut names = Vec::new();
+        for record in &reduced {
+            names.push(models::Name {
+                id: Uuid::new_v4(),
+                scientific_name: record.scientific_name.clone(),
+                canonical_name: record.canonical_name.clone(),
+                authorship: record.scientific_name_authorship.clone(),
+            });
+        }
+        names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
+        names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
+        super::names::import(&names)?;
+
         let names = name_lookup(&mut pool)?;
-        let publications = name_publication_lookup(&mut pool)?;
+        let publications = publication_lookup(&mut pool)?;
 
         let mut records = Vec::new();
         for record in reduced {
             let name_uuid = names.get(&record.scientific_name);
             let acted_on_uuid = names.get(&record.acted_on);
-            let name_publication_id = publications.get(&record.publication);
+            let pub_id = publications.get(&record.publication);
 
-            if let (Some(name_uuid), Some(acted_on_uuid), Some(nomen_act), Some(name_publication_id)) =
-                (name_uuid, acted_on_uuid, record.act, name_publication_id)
+            // default to the root of names
+            let acted_on_uuid = acted_on_uuid.or_else(|| names.get("Eukaryota"));
+
+            if let (Some(name_uuid), Some(acted_on_uuid), Some(nomen_act), Some(pub_id)) =
+                (name_uuid, acted_on_uuid, record.act, pub_id)
             {
                 records.push(models::NomenclaturalAct {
                     id: Uuid::new_v4(),
                     entity_id: record.entity_id,
-                    publication_id: *name_publication_id,
+                    publication_id: *pub_id,
                     name_id: *name_uuid,
                     acted_on_id: *acted_on_uuid,
                     act: nomen_act,
@@ -276,6 +318,12 @@ impl From<Map<NomenclaturalActAtom>> for NomenclaturalAct {
                 Publication(value) => act.publication = value,
                 PublicationDate(value) => act.publication_date = Some(value),
                 ScientificName(value) => act.scientific_name = value,
+                Authorship(value) => act.scientific_name_authorship = Some(value),
+                CanonicalName(value) => act.canonical_name = value,
+                AuthorityName(value) => act.authority_name = Some(value),
+                AuthorityYear(value) => act.authority_year = Some(value),
+                BasionymAuthorityName(value) => act.base_authority_name = Some(value),
+                BasionymAuthorityYear(value) => act.base_authority_year = Some(value),
                 ActedOn(value) => act.acted_on = value,
                 Act(value) => act.act = Some(value),
                 SourceUrl(value) => act.source_url = value,

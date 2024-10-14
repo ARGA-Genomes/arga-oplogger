@@ -1,6 +1,7 @@
 mod archive;
 mod database;
 mod errors;
+mod frames;
 mod loggers;
 mod operations;
 mod readers;
@@ -90,6 +91,8 @@ pub enum UpdateCommand {
     TaxonomicActs,
     /// Update nomenclatural acts with the reduced logs
     NomenclaturalActs,
+    /// Update publications with the reduced logs
+    Publications,
 }
 
 #[derive(clap::Subcommand)]
@@ -180,12 +183,13 @@ fn main() -> Result<(), Error> {
             }
             UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
+            UpdateCommand::Publications => publications::update()?,
         },
 
         Commands::Plazi(cmd) => match cmd {
             PlaziCommand::Import(args) => {
                 let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
-                plazi::treatments::import(args.path.clone(), dataset_version)?;
+                plazi::document::import_all(args.path.clone(), dataset_version.id)?;
             }
         },
     }

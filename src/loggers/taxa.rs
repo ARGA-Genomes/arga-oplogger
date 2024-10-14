@@ -22,8 +22,8 @@ use crate::database::{
     MaterializedView,
 };
 use crate::errors::Error;
+use crate::frames::IntoFrame;
 use crate::operations::group_operations;
-use crate::readers::csv::IntoFrame;
 use crate::readers::{meta, OperationLoader};
 use crate::utils::{
     new_progress_bar,

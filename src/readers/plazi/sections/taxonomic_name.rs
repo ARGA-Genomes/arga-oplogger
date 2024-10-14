@@ -1,13 +1,14 @@
 use super::formatting::prelude::*;
 use super::parsing::prelude::*;
 use super::prelude::*;
+use crate::utils::titleize_first_word;
 
 
 #[derive(Debug)]
 pub struct TaxonomicName {
     pub id: Option<String>,
 
-    pub authority: Option<String>,
+    pub authorship: Option<String>,
     pub authority_name: Option<String>,
     pub authority_year: Option<usize>,
     pub base_authority_name: Option<String>,
@@ -33,6 +34,61 @@ pub struct TaxonomicName {
 #[derive(Debug)]
 pub struct TaxonomicNameLabel {
     pub value: String,
+}
+
+
+impl TaxonomicName {
+    pub fn canonical_name(&self) -> String {
+        let name = match self.rank.as_ref().map(|s| s.as_str()) {
+            Some("genus") => format!("{}", self.genus.clone().unwrap_or_default()),
+            Some("species") => {
+                let genus = self.genus.clone().unwrap_or_default();
+                let specific_epithet = self.species.clone().unwrap_or_default();
+                let subspecific_epithet = self.subspecies.clone().unwrap_or_default();
+
+                let name = match &self.subgenus {
+                    Some(subgenus) => format!("{genus} ({subgenus}) {specific_epithet} {subspecific_epithet}"),
+                    None => format!("{genus} {specific_epithet} {subspecific_epithet}"),
+                };
+                name.trim().to_string()
+            }
+            _ => self.name.to_string(),
+        };
+
+        titleize_first_word(&name.to_lowercase())
+    }
+
+    pub fn scientific_name_authority(&self) -> Option<String> {
+        let auth = match (&self.authority_name, &self.authority_year) {
+            (Some(name), Some(year)) => Some(format!("{name} {year}")),
+            (Some(name), None) => Some(name.clone()),
+            _ => None,
+        };
+
+        let base = match (&self.base_authority_name, &self.base_authority_year) {
+            (Some(name), Some(year)) => Some(format!("{name} {year}")),
+            (Some(name), None) => Some(name.clone()),
+            _ => None,
+        };
+
+        match (auth, base) {
+            (Some(auth), Some(base)) => Some(format!("({base}) {auth}")),
+            (Some(auth), None) => Some(auth),
+            (None, Some(base)) => Some(format!("({base})")),
+            (None, None) => None,
+        }
+    }
+
+    pub fn scientific_name(&self) -> String {
+        let mut name = self.canonical_name();
+        let authority = self.scientific_name_authority().unwrap_or_default();
+
+        // if the document specifies the authorship then use it, otherwise use the
+        // derived authority details
+        let authorship = self.authorship.as_ref().unwrap_or(&authority);
+        name = format!("{name} {}", authorship).trim().to_string();
+        name
+    }
 }
 
 
@@ -220,7 +276,7 @@ impl<T: BufRead> ParseSection<T> for TaxonomicName {
 
         Ok(TaxonomicName {
             id: parse_attribute_opt(reader, event, "id")?,
-            authority: parse_attribute_opt(reader, event, "authority")?,
+            authorship: parse_attribute_opt(reader, event, "authority")?,
             authority_name: parse_attribute_opt(reader, event, "authorityName")?,
             authority_year: parse_attribute_string_opt(reader, event, "authorityYear")?,
             base_authority_name: parse_attribute_opt(reader, event, "baseAuthorityName")?,

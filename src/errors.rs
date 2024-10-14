@@ -17,6 +17,12 @@ pub enum Error {
 
     #[error(transparent)]
     XmlParser(#[from] quick_xml::Error),
+
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    NomenclaturalActType(#[from] NomenclaturalActTypeError),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -35,4 +41,13 @@ pub enum ParseError {
 
     #[error("cannot find element: {0}")]
     NotFound(String),
+}
+
+
+#[derive(thiserror::Error, Debug)]
+pub enum NomenclaturalActTypeError {
+    #[error("taxonomic name in nomenclatural section must have a status")]
+    TaxonomicStatusNotFound,
+    #[error("unrecognized taxonomic status: {0}")]
+    InvalidNomenclaturalActType(String),
 }

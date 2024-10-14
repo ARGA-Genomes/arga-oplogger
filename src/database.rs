@@ -174,6 +174,23 @@ pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     Ok(map)
 }
 
+pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::publications::dsl::*;
+    info!("Creating publication map");
+
+    let mut conn = pool.get()?;
+
+    let results = publications.select((id, title)).load::<(Uuid, String)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    for (uuid, lookup) in results {
+        map.insert(lookup, uuid);
+    }
+
+    info!(total = map.len(), "Creating publication map finished");
+    Ok(map)
+}
+
 
 #[derive(Clone)]
 pub struct FrameLoader<T> {

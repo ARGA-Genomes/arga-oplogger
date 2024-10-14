@@ -55,6 +55,9 @@ impl From<Meta> for models::Source {
             rights_holder: meta.collection.rights_holder,
             access_rights: meta.collection.access_rights,
             license: meta.collection.license,
+            reuse_pill: None,
+            access_pill: None,
+            content_type: None,
         }
     }
 }
@@ -74,6 +77,10 @@ impl From<Meta> for models::Dataset {
             rights_holder: Some(meta.attribution.rights_holder),
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            reuse_pill: None,
+            access_pill: None,
+            publication_year: None,
+            content_type: None,
         }
     }
 }

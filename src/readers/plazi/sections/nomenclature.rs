@@ -1,19 +1,60 @@
+use std::collections::VecDeque;
+
+use arga_core::models::NomenclaturalActType;
+
 use super::formatting::prelude::*;
 use super::parsing::prelude::*;
 use super::prelude::*;
+use crate::errors::NomenclaturalActTypeError;
 
 
 #[derive(Debug)]
 pub struct Nomenclature {
     pub page_number: Option<i32>,
-    pub taxon: Option<TaxonomicName>,
     pub taxon_label: Option<String>,
+
+    /// A nomenclature section can contain many taxonomic name elements,
+    /// so we collect them all here for completeness
+    pub taxonomic_names: VecDeque<TaxonomicName>,
+    pub act: NomenclaturalActType,
+    pub acted_on: String,
+}
+
+pub fn act_from_name(name: &TaxonomicName) -> Result<NomenclaturalActType, NomenclaturalActTypeError> {
+    use NomenclaturalActType::*;
+
+    match name.status.as_ref().map(|s| s.as_str()) {
+        Some("sp. nov.") => Ok(SpeciesNova),
+        Some("spec. nov.") => Ok(SpeciesNova),
+        Some("new species") => Ok(SpeciesNova),
+        Some("sp. n.") => Ok(SpeciesNova),
+        Some("comb. nov.") => Ok(CombinatioNova),
+        Some("stat. rev.") => Ok(RevivedStatus),
+        Some("gen. et sp. nov.") => Ok(GenusSpeciesNova),
+        Some("subsp. nov.") => Ok(SubspeciesNova),
+        Some(val) => Err(NomenclaturalActTypeError::InvalidNomenclaturalActType(val.to_string())),
+        None => Ok(NameUsage), // assume that a publication with a taxonomic status is a name usage
+    }
+}
+
+pub fn acted_on_from_name(name: &TaxonomicName) -> Result<String, NomenclaturalActTypeError> {
+    let biota = "Biota".to_string();
+    let acted_on = match act_from_name(name)? {
+        NomenclaturalActType::SpeciesNova => name.genus.clone().unwrap_or(biota),
+        NomenclaturalActType::SubspeciesNova => name.species.clone().unwrap_or(biota),
+        NomenclaturalActType::GenusSpeciesNova => name.family.clone().unwrap_or(biota),
+        NomenclaturalActType::CombinatioNova => name.base_authority_name.clone().unwrap_or(biota),
+        NomenclaturalActType::RevivedStatus => name.base_authority_name.clone().unwrap_or(biota),
+        NomenclaturalActType::NameUsage => name.scientific_name(),
+        NomenclaturalActType::SubgenusPlacement => name.base_authority_name.clone().unwrap_or(biota),
+    };
+    Ok(acted_on)
 }
 
 
 impl<T: BufRead> ParseSection<T> for Nomenclature {
     fn parse(reader: &mut Reader<T>, event: &BytesStart) -> Result<Self, Error> {
-        let mut taxon = None;
+        let mut taxonomic_names = VecDeque::new();
         let mut taxon_label = None;
 
         let mut stack = SpanStack::new();
@@ -106,7 +147,7 @@ impl<T: BufRead> ParseSection<T> for Nomenclature {
                 }
 
                 Event::Start(e) if start_eq(&e, "taxonomicName") => {
-                    taxon = Some(TaxonomicName::parse(reader, &e)?);
+                    taxonomic_names.push_back(TaxonomicName::parse(reader, &e)?);
                 }
 
                 Event::Start(e) if start_eq(&e, "taxonomicNameLabel") => {
@@ -274,10 +315,22 @@ impl<T: BufRead> ParseSection<T> for Nomenclature {
             }
         }
 
+        let act = match taxonomic_names.front() {
+            Some(name) => act_from_name(name),
+            None => Err(NomenclaturalActTypeError::TaxonomicStatusNotFound),
+        }?;
+
+        let acted_on = match taxonomic_names.front() {
+            Some(name) => acted_on_from_name(name),
+            None => Err(NomenclaturalActTypeError::TaxonomicStatusNotFound),
+        }?;
+
         Ok(Nomenclature {
             page_number: parse_attribute_string_opt(reader, event, "pageNumber")?,
-            taxon,
+            taxonomic_names,
             taxon_label,
+            act,
+            acted_on,
         })
     }
 }
