@@ -17,12 +17,14 @@ use super::sections::treatment::Treatment;
 use crate::errors::{Error, ParseError};
 use crate::frames::{FrameReader, IntoFrame};
 use crate::utils::FrameImportBars;
-use crate::{import_nomenclatural_acts, import_publications, nomenclatural_acts, publications, FrameProgress};
+use crate::{nomenclatural_acts, publications, FrameProgress};
 
 
 pub fn import_all(input_dir: PathBuf, dataset_version: Uuid) -> Result<(), Error> {
     info!("Enumerating files in '{input_dir:?}'");
     let files = xml_files(input_dir)?;
+
+    let pool = crate::database::get_pool()?;
 
     for (idx, file) in files.iter().enumerate() {
         info!("Reading file {idx}: {file:?}");
@@ -37,13 +39,13 @@ pub fn import_all(input_dir: PathBuf, dataset_version: Uuid) -> Result<(), Error
             let fh = File::open(file)?;
             let reader = BufReader::new(fh);
             let document = DocumentReader::<publications::Record, _>::from_reader(reader, dataset_version)?;
-            import_publications(document)?;
+            publications::import(document, pool.clone())?;
         }
         {
             let fh = File::open(file)?;
             let reader = BufReader::new(fh);
             let document = DocumentReader::<nomenclatural_acts::Record, _>::from_reader(reader, dataset_version)?;
-            import_nomenclatural_acts(document)?;
+            nomenclatural_acts::import(document, pool.clone())?;
         }
     }
 

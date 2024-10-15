@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::database::{get_pool, name_lookup, name_publication_lookup, publication_lookup, FrameLoader};
+use crate::database::{get_pool, name_lookup, name_publication_lookup, publication_lookup, FrameLoader, PgPool};
 use crate::errors::Error;
-use crate::frame_push_opt;
-use crate::frames::IntoFrame;
+use crate::frames::{FrameReader, IntoFrame};
 use crate::operations::group_operations;
 use crate::readers::OperationLoader;
 use crate::utils::{new_progress_bar, new_spinner, nomenclatural_act_from_str};
+use crate::{frame_push_opt, import_frames_from_stream, FrameProgress};
 
 type NomenclaturalActFrame = DataFrame<NomenclaturalActAtom>;
 
@@ -122,6 +122,17 @@ impl IntoFrame for Record {
         frame
     }
 }
+
+
+/// Import frames of nomenclatural acts from the stream
+pub fn import<R>(reader: R, pool: PgPool) -> Result<(), Error>
+where
+    R: FrameReader<Atom = models::NomenclaturalActAtom> + FrameProgress,
+    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
+{
+    import_frames_from_stream::<models::NomenclaturalActOperation, R>(reader, pool)
+}
+
 
 /// The ARGA taxonomic act CSV record output
 /// This is the record in a CSV after reducing the taxonomic act logs

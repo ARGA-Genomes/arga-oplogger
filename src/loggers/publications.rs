@@ -7,11 +7,11 @@ use diesel::*;
 use rayon::prelude::*;
 use serde::Deserialize;
 
-use crate::database::FrameLoader;
+use crate::database::{FrameLoader, PgPool};
 use crate::errors::Error;
-use crate::frame_push_opt;
-use crate::frames::IntoFrame;
+use crate::frames::{FrameReader, IntoFrame};
 use crate::readers::OperationLoader;
+use crate::{frame_push_opt, import_frames_from_stream, FrameProgress};
 
 type PublicationFrame = DataFrame<PublicationAtom>;
 
@@ -94,6 +94,16 @@ impl IntoFrame for Record {
         frame_push_opt!(frame, RecordUpdatedAt, self.updated_at);
         frame
     }
+}
+
+
+/// Import frames of publications from the stream
+pub fn import<R>(reader: R, pool: PgPool) -> Result<(), Error>
+where
+    R: FrameReader<Atom = models::PublicationAtom> + FrameProgress,
+    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
+{
+    import_frames_from_stream::<models::PublicationOperation, R>(reader, pool)
 }
 
 

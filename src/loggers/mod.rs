@@ -28,7 +28,7 @@ pub use taxa::Taxa;
 pub use taxonomic_acts::TaxonomicActs;
 use uuid::Uuid;
 
-use crate::database::{create_dataset_version, get_pool, FrameLoader};
+use crate::database::{create_dataset_version, get_pool, FrameLoader, PgPool};
 use crate::errors::Error;
 use crate::frames::{FrameReader, Framer, IntoFrame};
 use crate::operations::distinct_changes;
@@ -190,7 +190,7 @@ where
 /// The Record (<T>) must implement the IntoFrame trait and be deserializable from a CSV file.
 /// The Operation (<Op>) must implement the OperationLoader trait
 /// The Reader (<R>) only needs to implement std::io::Read
-pub fn import_frames_from_stream<T, Op, R>(reader: R) -> Result<(), Error>
+pub fn import_frames_from_stream<Op, R>(reader: R, pool: PgPool) -> Result<(), Error>
 where
     R: FrameReader + FrameProgress,
     R::Atom: Default + Clone + ToString + PartialEq,
@@ -208,7 +208,7 @@ where
     // and the third is the frame loader which allows us to query the database to deduplicate and
     // pull out unique operations, as well as upsert the new operations.
     let framer = Framer::new(reader);
-    let loader = FrameLoader::<Op>::new(get_pool()?);
+    let loader = FrameLoader::<Op>::new(pool);
 
     // parse and convert big chunks of rows. this is an IO bound task but for each
     // chunk we need to query the database and then insert into the database, so
@@ -237,29 +237,6 @@ where
 
     bars.finish();
     Ok(())
-}
-
-
-/// A helper function to concurrently import publication operations from a frame stream
-pub fn import_publications<R>(reader: R) -> Result<(), Error>
-where
-    R: FrameReader + FrameProgress,
-    R::Atom: Default + Clone + ToString + PartialEq,
-    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
-    models::PublicationOperation: LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>>,
-{
-    import_frames_from_stream::<models::PublicationAtom, models::PublicationOperation, R>(reader)
-}
-
-/// A helper function to concurrently import nomenclatural act operations from a frame stream
-pub fn import_nomenclatural_acts<R>(reader: R) -> Result<(), Error>
-where
-    R: FrameReader + FrameProgress,
-    R::Atom: Default + Clone + ToString + PartialEq,
-    R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
-    models::NomenclaturalActOperation: LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>>,
-{
-    import_frames_from_stream::<models::NomenclaturalActAtom, models::NomenclaturalActOperation, R>(reader)
 }
 
 
