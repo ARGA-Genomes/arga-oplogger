@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::database::{get_pool, name_lookup, name_publication_lookup, publication_lookup, FrameLoader, PgPool};
+use crate::database::{get_pool, name_lookup, publication_lookup, FrameLoader, PgPool};
 use crate::errors::Error;
 use crate::frames::{FrameReader, IntoFrame};
 use crate::operations::group_operations;

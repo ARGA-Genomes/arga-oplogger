@@ -1,5 +1,4 @@
 use arga_core::schema::datasets;
-use arga_core::{models, schema};
 use diesel::*;
 use std::path::PathBuf;
 

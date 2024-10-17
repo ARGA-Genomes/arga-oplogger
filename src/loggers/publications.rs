@@ -121,7 +121,7 @@ pub fn update() -> Result<(), Error> {
         .select(count_distinct(entity_id))
         .get_result::<i64>(&mut conn)?;
 
-    let limit = 3;
+    let limit = 10_000;
     let offsets: Vec<i64> = (0..total).step_by(limit as usize).collect();
 
     offsets
@@ -240,7 +240,7 @@ impl From<Record> for models::Publication {
             entity_id: value.entity_id,
 
             title: value.title,
-            authors: value.authors.into_iter().map(|v| Some(v)).collect(),
+            authors: value.authors.into_iter().map(Some).collect(),
             published_year: value.published_year,
             published_date: value.published_date,
             language: value.language,

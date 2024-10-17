@@ -111,13 +111,27 @@ pub fn titleize_first_word(text: &str) -> String {
     let mut words = text.split_whitespace();
 
     if let Some(word) = words.next() {
-        converted.push(word.to_title_case());
+        if is_uppercase(word) {
+            converted.push(word.to_title_case());
+        }
+        else {
+            converted.push(word.to_string());
+        }
     }
     for word in words {
         converted.push(word.to_string());
     }
 
     converted.join(" ")
+}
+
+pub fn is_uppercase(text: &str) -> bool {
+    for chr in text.chars() {
+        if chr.is_lowercase() {
+            return false;
+        }
+    }
+    true
 }
 
 pub fn taxonomic_rank_from_str<'de, D>(deserializer: D) -> Result<TaxonomicRank, D::Error>

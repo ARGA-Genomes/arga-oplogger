@@ -9,23 +9,29 @@ use arga_core::models::{
     TaxonomicActAtom,
     TaxonomicActOperation,
     TaxonomicActOperationWithDataset,
-    TaxonomicActType,
     TaxonomicStatus,
 };
 use arga_core::schema;
 use chrono::{DateTime, Utc};
 use diesel::*;
 use indicatif::ProgressIterator;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::database::{dataset_lookup, get_pool, taxon_lookup, FrameLoader};
+use crate::database::{dataset_lookup, get_pool, taxon_lookup, FrameLoader, PgPool};
 use crate::errors::Error;
 use crate::frames::IntoFrame;
 use crate::operations::group_operations;
 use crate::readers::{meta, OperationLoader};
-use crate::utils::{date_time_from_str_opt, new_progress_bar, new_spinner, taxonomic_status_from_str};
+use crate::utils::{
+    date_time_from_str_opt,
+    new_progress_bar,
+    new_spinner,
+    taxonomic_status_from_str,
+    titleize_first_word,
+};
 use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
 type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
@@ -61,11 +67,132 @@ impl OperationLoader for FrameLoader<TaxonomicActOperation> {
     }
 }
 
+// impl OperationReducer for FrameLoader<TaxonomicActOperationWithDataset> {
+//     type Operation = TaxonomicActOperationWithDataset;
+//     type ReducedRecord = TaxonomicAct;
+
+//     fn total_entities(&self) -> Result<i64, Error> {
+//         use diesel::dsl::count_distinct;
+//         use schema::taxonomic_act_logs::dsl::*;
+
+//         let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+//         // get the total amount of distinct entities in the log table. this allows
+//         // us to split up the reduction into many threads without loading all operations
+//         // into memory
+//         let total = taxonomic_act_logs
+//             .select(count_distinct(entity_id))
+//             .get_result::<i64>(&mut conn)?;
+
+//         Ok(total)
+//     }
+
+//     fn load_entity_operations(&self, offset: i64, limit: i64) -> Result<Vec<Self::Operation>, Error> {
+//         use schema::taxonomic_act_logs::dsl::*;
+//         use schema::{dataset_versions, datasets};
+
+//         let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+//         let entity_ids = taxonomic_act_logs
+//             .select(entity_id)
+//             .group_by(entity_id)
+//             .order_by(entity_id)
+//             .offset(offset)
+//             .limit(limit)
+//             .into_boxed();
+
+//         let operations = taxonomic_act_logs
+//             .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
+//             .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
+//             .filter(entity_id.eq_any(entity_ids))
+//             .order_by((entity_id, operation_id))
+//             .load::<TaxonomicActOperationWithDataset>(&mut conn)?;
+
+//         Ok(operations)
+//     }
+
+//     fn reduce(&self, operations: Vec<Self::Operation>) -> Result<Vec<Self::ReducedRecord>, Error> {
+//         let entities = group_operations(operations, vec![]);
+//         let mut records = Vec::new();
+
+//         for (key, ops) in entities.into_iter() {
+//             let mut map = Map::new(key);
+//             map.reduce(&ops);
+
+//             let mut record = TaxonomicAct::from(map);
+//             if let Some(op) = ops.first() {
+//                 record.dataset_uuid.clone_from(&op.dataset.id);
+//                 records.push(record);
+//             }
+//         }
+
+//         Ok(records)
+//     }
+
+//     fn upsert(&self, reduced_records: Vec<TaxonomicAct>) -> Result<(), Error> {
+//         let mut pool = self.pool.clone();
+
+//         let mut dataset_ids = HashSet::new();
+//         for record in &reduced_records {
+//             dataset_ids.insert(record.dataset_uuid);
+//         }
+
+//         let dataset_ids = Vec::from_iter(dataset_ids);
+//         let taxa = taxon_lookup(&mut pool, &dataset_ids)?;
+
+//         let mut records = Vec::new();
+//         for record in reduced_records {
+//             let taxon = taxa.get(&(record.dataset_uuid, record.taxon));
+//             let accepted_taxon = taxa.get(&(record.dataset_uuid, record.accepted_taxon.unwrap_or_default()));
+
+//             if let (Some(taxonomic_act), Some(taxon)) = (record.act, taxon) {
+//                 records.push(models::TaxonomicAct {
+//                     id: Uuid::new_v4(),
+//                     entity_id: record.entity_id,
+//                     taxon_id: *taxon,
+//                     accepted_taxon_id: accepted_taxon.cloned(),
+//                     act: taxonomic_act,
+//                     source_url: record.source_url,
+//                     created_at: chrono::Utc::now(),
+//                     updated_at: chrono::Utc::now(),
+//                     data_created_at: record.data_created_at,
+//                     data_updated_at: record.data_updated_at,
+//                 })
+//             }
+//         }
+
+//         // postgres always creates a new row version so we cant get
+//         // an actual figure of the amount of records changed
+//         {
+//             use diesel::upsert::excluded;
+//             use schema::taxonomic_acts::dsl::*;
+
+//             diesel::insert_into(taxonomic_acts)
+//                 .values(records)
+//                 .on_conflict(entity_id)
+//                 .do_update()
+//                 .set((
+//                     entity_id.eq(excluded(entity_id)),
+//                     taxon_id.eq(excluded(taxon_id)),
+//                     accepted_taxon_id.eq(excluded(accepted_taxon_id)),
+//                     act.eq(excluded(act)),
+//                     source_url.eq(excluded(source_url)),
+//                     updated_at.eq(excluded(updated_at)),
+//                     data_created_at.eq(excluded(data_created_at)),
+//                     data_updated_at.eq(excluded(data_updated_at)),
+//                 ))
+//                 .execute(&mut conn)?;
+//         }
+
+//         Ok(())
+//     }
+// }
+
 
 /// The CSV record to decompose into operation logs.
 /// This is deserializeable with the serde crate and enforces expectations
 /// about what fields are mandatory and the format they should be in.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct Record {
     /// Any value that uniquely identifies this record through its lifetime.
     /// This is a kind of global permanent identifier
@@ -102,28 +229,18 @@ impl IntoFrame for Record {
     fn into_frame(self, mut frame: TaxonomicActFrame) -> TaxonomicActFrame {
         use TaxonomicActAtom::*;
 
-        // derive the act from the taxonomic status
-        let act = match self.taxonomic_status {
-            TaxonomicStatus::Accepted => Some(TaxonomicActType::Accepted),
-            TaxonomicStatus::Synonym => Some(TaxonomicActType::Synonym),
-            TaxonomicStatus::Homonym => Some(TaxonomicActType::Homonym),
-            TaxonomicStatus::Unaccepted => Some(TaxonomicActType::Unaccepted),
-            TaxonomicStatus::NomenclaturalSynonym => Some(TaxonomicActType::NomenclaturalSynonym),
-            TaxonomicStatus::TaxonomicSynonym => Some(TaxonomicActType::TaxonomicSynonym),
-            TaxonomicStatus::ReplacedSynonym => Some(TaxonomicActType::ReplacedSynonym),
-            _ => None,
-        };
+        let accepted_taxon_usage = self.accepted_usage_taxon.map(|val| titleize_first_word(&val));
 
         frame.push(EntityId(self.entity_id));
-        frame.push(Taxon(self.scientific_name));
-        frame_push_opt!(frame, Act, act);
-        frame_push_opt!(frame, AcceptedTaxon, self.accepted_usage_taxon);
+        frame.push(Taxon(titleize_first_word(&self.scientific_name)));
+        frame_push_opt!(frame, AcceptedTaxon, accepted_taxon_usage);
         frame_push_opt!(frame, SourceUrl, self.references);
         frame_push_opt!(frame, CreatedAt, self.created_at);
         frame_push_opt!(frame, UpdatedAt, self.updated_at);
         frame
     }
 }
+
 
 /// The ARGA taxonomic act CSV record output
 /// This is the record in a CSV after reducing the taxonomic act logs
@@ -135,13 +252,13 @@ pub struct TaxonomicAct {
     /// The external identifier of the source dataset as determined by ARGA
     dataset_id: String,
 
+    /// The internal identifier of the source dataset as determined by ARGA
+    dataset_uuid: Uuid,
+
     /// The name of the taxon. Should include author when possible
     taxon: String,
     /// The name of the taxon currently accepted. Should include author when possible
     accepted_taxon: Option<String>,
-
-    /// The taxonomic act of this record
-    act: Option<TaxonomicActType>,
 
     /// The timestamp of when the data was created in the dataset
     data_created_at: Option<DateTime<Utc>>,
@@ -156,6 +273,141 @@ pub struct TaxonomicAct {
 
 pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Result<(), Error> {
     import_compressed_csv_stream::<S, Record, TaxonomicActOperation>(stream, dataset)
+}
+
+pub fn update() -> Result<(), Error> {
+    let pool = get_pool()?;
+    let mut conn = pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+    // let loader: FrameLoader<TaxonomicActOperationWithDataset> = FrameLoader::new(pool);
+
+    // get the total amount of distinct entities in the log table. this allows
+    // us to split up the reduction into many threads without loading all operations
+    // into memory
+    let total = {
+        use diesel::dsl::count_distinct;
+        use schema::taxonomic_act_logs::dsl::*;
+
+        taxonomic_act_logs
+            .select(count_distinct(entity_id))
+            .get_result::<i64>(&mut conn)?
+    };
+
+    let limit = 10_000;
+    let offsets: Vec<i64> = (0..total).step_by(limit as usize).collect();
+
+    offsets
+        .into_par_iter()
+        .try_for_each(|offset| reduce_and_update(pool.clone(), offset, limit))?;
+
+    Ok(())
+}
+
+pub fn reduce_and_update(mut pool: PgPool, offset: i64, limit: i64) -> Result<(), Error> {
+    let mut conn = pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+    let operations = {
+        use schema::taxonomic_act_logs::dsl::*;
+        use schema::{dataset_versions, datasets};
+
+        // we first get all the entity ids within a specified range. this means that the
+        // query here has to return the same amount of results as a COUNT DISTINCT query otherwise
+        // some entities will be missed during the update. in particular make sure to always order
+        // the query results otherwise random entities might get pulled in since postgres doesnt sort by default
+        let entity_ids = taxonomic_act_logs
+            .select(entity_id)
+            .group_by(entity_id)
+            .order_by(entity_id)
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
+
+        // get the operations for the entities making sure to order by operation id so that
+        // the CRDT structs can do their thing
+        taxonomic_act_logs
+            .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
+            .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
+            .filter(entity_id.eq_any(entity_ids))
+            .order_by((entity_id, operation_id))
+            .load::<TaxonomicActOperationWithDataset>(&mut conn)?
+    };
+
+    // group the entity operations up and preparing it for use in the LWW map
+    let entities = group_operations(operations, vec![]);
+    let mut reduced_records = Vec::new();
+
+    // reduce all the operations by applying them to an empty record
+    // as per the last write wins policy
+    for (key, ops) in entities.into_iter() {
+        let mut map = Map::new(key);
+        map.reduce(&ops);
+
+        let mut record = TaxonomicAct::from(map);
+        if let Some(op) = ops.first() {
+            record.dataset_uuid.clone_from(&op.dataset.id);
+            reduced_records.push(record);
+        }
+    }
+
+    // get all datasets involved so that we can scope the taxon lookup
+    let mut dataset_ids = HashSet::new();
+    for record in &reduced_records {
+        dataset_ids.insert(record.dataset_uuid);
+    }
+
+    let dataset_ids = Vec::from_iter(dataset_ids);
+    let taxa = taxon_lookup(&mut pool, &dataset_ids)?;
+
+    let mut records = Vec::new();
+    for record in reduced_records {
+        // get the taxa that match by name and that are also from the same dataset as the record. this ensures
+        // that relationships aren't formed across taxonomic datasets
+        let taxon = taxa.get(&(record.dataset_uuid, record.taxon));
+        let accepted_taxon = taxa.get(&(record.dataset_uuid, record.accepted_taxon.unwrap_or_default()));
+
+        // taxonomic act and the taxon are mandatory so we print a warning when something
+        // wont end up inserted in the database
+        match taxon {
+            None => warn!(record.entity_id, "Cannot find the taxon in the existing database"),
+            Some(taxon) => records.push(models::TaxonomicAct {
+                id: Uuid::new_v4(),
+                entity_id: record.entity_id,
+                taxon_id: *taxon,
+                accepted_taxon_id: accepted_taxon.cloned(),
+                source_url: record.source_url,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                data_created_at: record.data_created_at,
+                data_updated_at: record.data_updated_at,
+            }),
+        }
+    }
+
+    // postgres always creates a new row version so we cant get
+    // an actual figure of the amount of records changed
+    {
+        use diesel::upsert::excluded;
+        use schema::taxonomic_acts::dsl::*;
+
+        for chunk in records.chunks(1000) {
+            diesel::insert_into(taxonomic_acts)
+                .values(chunk)
+                .on_conflict(entity_id)
+                .do_update()
+                .set((
+                    entity_id.eq(excluded(entity_id)),
+                    taxon_id.eq(excluded(taxon_id)),
+                    accepted_taxon_id.eq(excluded(accepted_taxon_id)),
+                    source_url.eq(excluded(source_url)),
+                    updated_at.eq(excluded(updated_at)),
+                    data_created_at.eq(excluded(data_created_at)),
+                    data_updated_at.eq(excluded(data_updated_at)),
+                ))
+                .execute(&mut conn)?;
+        }
+    }
+
+    Ok(())
 }
 
 
@@ -251,13 +503,12 @@ impl TaxonomicActs {
             let taxon = taxa.get(&(dataset_uuid, record.taxon));
             let accepted_taxon = taxa.get(&(dataset_uuid, record.accepted_taxon.unwrap_or_default()));
 
-            if let (Some(taxonomic_act), Some(taxon)) = (record.act, taxon) {
+            if let Some(taxon) = taxon {
                 records.push(models::TaxonomicAct {
                     id: Uuid::new_v4(),
                     entity_id: record.entity_id,
                     taxon_id: *taxon,
                     accepted_taxon_id: accepted_taxon.cloned(),
-                    act: taxonomic_act,
                     source_url: record.source_url,
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
@@ -281,7 +532,6 @@ impl TaxonomicActs {
                     entity_id.eq(excluded(entity_id)),
                     taxon_id.eq(excluded(taxon_id)),
                     accepted_taxon_id.eq(excluded(accepted_taxon_id)),
-                    act.eq(excluded(act)),
                     source_url.eq(excluded(source_url)),
                     updated_at.eq(excluded(updated_at)),
                     data_created_at.eq(excluded(data_created_at)),
@@ -316,7 +566,6 @@ impl From<Map<TaxonomicActAtom>> for TaxonomicAct {
                 PublicationDate(value) => act.publication_date = Some(value),
                 Taxon(value) => act.taxon = value,
                 AcceptedTaxon(value) => act.accepted_taxon = Some(value),
-                Act(value) => act.act = Some(value),
                 SourceUrl(value) => act.source_url = Some(value),
                 CreatedAt(value) => act.data_created_at = Some(value),
                 UpdatedAt(value) => act.data_updated_at = Some(value),

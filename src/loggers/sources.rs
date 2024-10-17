@@ -5,7 +5,6 @@ use arga_core::models::DataReuseStatus;
 use arga_core::models::Source;
 use arga_core::models::SourceContentType;
 use arga_core::schema::sources;
-use arga_core::{models, schema};
 use diesel::*;
 
 use crate::database::get_pool;

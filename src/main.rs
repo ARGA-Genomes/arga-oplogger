@@ -200,7 +200,8 @@ fn main() -> Result<(), Error> {
                 Taxa::update()?;
                 Taxa::link()?;
             }
-            UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,
+            UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
+            // UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
         },
