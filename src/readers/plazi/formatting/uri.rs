@@ -25,7 +25,7 @@ impl<T: BufRead> ParseFormat<T> for Uri {
                 Event::Start(e) if start_eq(&e, "emphasis") => {}
                 Event::End(e) if end_eq(&e, "emphasis") => {}
 
-                Event::Text(txt) => stack.push(Span::text(&txt.unescape()?.into_owned())),
+                Event::Text(txt) => stack.push(Span::text(&txt.unescape()?)),
                 Event::End(e) if end_eq(&e, "uri") => break,
                 event => panic!("Unknown element. event: {event:#?}"),
             }

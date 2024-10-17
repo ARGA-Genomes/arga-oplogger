@@ -14,7 +14,7 @@ use super::{parsing, sections};
 
 pub mod prelude {
     pub use super::footnote::Footnote;
-    pub use super::keys::{KeyLead, KeyStep};
+    
     pub use super::normalized_token::NormalizedToken;
     pub use super::page_break_token::PageBreakToken;
     pub use super::page_start_token::PageStartToken;
@@ -22,6 +22,6 @@ pub mod prelude {
     pub use super::table::{Table, TableNote};
     pub use super::uri::Uri;
     pub use super::uuid::Uuid;
-    pub use super::values::{Date, FormattedValue, Quantity};
+    pub use super::values::{Date, Quantity};
     pub use super::vocabulary::Classification;
 }

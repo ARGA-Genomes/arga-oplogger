@@ -16,7 +16,7 @@ impl<T: BufRead> ParseFormat<T> for CollectingCountry {
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::End(e) if end_eq(&e, "collectingCountry") => break,
-                Event::Text(txt) => stack.push(Span::text(&txt.unescape()?.into_owned())),
+                Event::Text(txt) => stack.push(Span::text(&txt.unescape()?)),
                 _ => {}
             }
         }

@@ -57,7 +57,7 @@ fn xml_files(base_dir: PathBuf) -> Result<Vec<PathBuf>, Error> {
     let mut files = vec![];
 
     // walk the base directory by recursively calling this function
-    for entry in std::fs::read_dir(&base_dir)? {
+    for entry in std::fs::read_dir(base_dir)? {
         let path = entry?.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
@@ -67,7 +67,7 @@ fn xml_files(base_dir: PathBuf) -> Result<Vec<PathBuf>, Error> {
             }
         }
         else if path.is_dir() {
-            files.extend(xml_files(path.into())?);
+            files.extend(xml_files(path)?);
         }
     }
 
@@ -130,7 +130,7 @@ where
         // the <document> element should be the root element
         loop {
             match reader.read_event_into(&mut buf)? {
-                Event::Start(e) if start_eq(&e, "document") => return Ok(DocumentHeader::parse(reader, &e)?),
+                Event::Start(e) if start_eq(&e, "document") => return DocumentHeader::parse(reader, &e),
                 Event::Eof => break,
                 _ => {}
             }

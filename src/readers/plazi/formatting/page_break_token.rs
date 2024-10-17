@@ -19,7 +19,7 @@ impl<T: BufRead> ParseFormat<T> for PageBreakToken {
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Text(txt) => {
-                    stack.push(Span::text(&txt.unescape()?.into_owned()));
+                    stack.push(Span::text(&txt.unescape()?));
                 }
                 Event::Start(e) if start_eq(&e, "normalizedToken") => {
                     let token = NormalizedToken::parse(reader, &e)?;

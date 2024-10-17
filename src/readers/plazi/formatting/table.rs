@@ -125,7 +125,7 @@ impl<T: BufRead> ParseFormat<T> for Table {
                     Table::parse(reader, &e)?;
                 }
 
-                Event::Text(txt) => stack.push(Span::text(&txt.unescape()?.into_owned())),
+                Event::Text(txt) => stack.push(Span::text(&txt.unescape()?)),
                 Event::End(e) if end_eq(&e, "table") => break,
                 event => panic!("Unknown element. event: {event:#?}"),
             }

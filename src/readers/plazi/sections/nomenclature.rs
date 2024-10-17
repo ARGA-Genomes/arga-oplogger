@@ -23,7 +23,7 @@ pub struct Nomenclature {
 pub fn act_from_name(name: &TaxonomicName) -> Result<NomenclaturalActType, NomenclaturalActTypeError> {
     use NomenclaturalActType::*;
 
-    match name.status.as_ref().map(|s| s.as_str()) {
+    match name.status.as_deref() {
         Some("sp. nov.") => Ok(SpeciesNova),
         Some("spec. nov.") => Ok(SpeciesNova),
         Some("new species") => Ok(SpeciesNova),

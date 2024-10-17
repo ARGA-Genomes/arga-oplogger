@@ -21,9 +21,9 @@ pub mod prelude {
     pub use super::location::{CollectingCountry, CollectingRegion};
     pub use super::materials_citation::MaterialsCitation;
     pub use super::nomenclature::Nomenclature;
-    pub use super::publications::JournalOrPublisher;
+    
     pub use super::subsection::{Section, SubSection};
     pub use super::taxonomic_name::{TaxonomicName, TaxonomicNameLabel};
-    pub use super::treatment::Treatment;
+    
     pub use super::type_status::TypeStatus;
 }

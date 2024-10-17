@@ -39,8 +39,8 @@ pub struct TaxonomicNameLabel {
 
 impl TaxonomicName {
     pub fn canonical_name(&self) -> String {
-        let name = match self.rank.as_ref().map(|s| s.as_str()) {
-            Some("genus") => format!("{}", self.genus.clone().unwrap_or_default()),
+        let name = match self.rank.as_deref() {
+            Some("genus") => self.genus.clone().unwrap_or_default().to_string(),
             Some("species") => {
                 let genus = self.genus.clone().unwrap_or_default();
                 let specific_epithet = self.species.clone().unwrap_or_default();
@@ -178,7 +178,7 @@ impl<T: BufRead> ParseSection<T> for TaxonomicName {
                 Event::Text(txt) => {
                     let text = Some(txt.unescape()?.into_owned());
                     if let Some(text) = &text {
-                        stack.push(Span::text(&text));
+                        stack.push(Span::text(text));
                     }
                 }
 
