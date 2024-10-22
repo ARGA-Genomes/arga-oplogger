@@ -251,7 +251,7 @@ impl NomenclaturalActs {
         }
         names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
         names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
-        super::names::import(&names)?;
+        super::names::import(pool.clone(), &names)?;
 
         let names = name_lookup(&mut pool)?;
         let publications = publication_lookup(&mut pool)?;

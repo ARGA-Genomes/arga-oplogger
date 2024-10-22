@@ -24,7 +24,6 @@ pub use nomenclatural_acts::NomenclaturalActs;
 use rayon::prelude::*;
 pub use sequences::Sequences;
 use serde::de::DeserializeOwned;
-pub use taxa::Taxa;
 pub use taxonomic_acts::TaxonomicActs;
 use uuid::Uuid;
 

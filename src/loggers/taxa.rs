@@ -9,7 +9,7 @@ use diesel::*;
 use indicatif::{ParallelProgressIterator, ProgressIterator};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::database::{
@@ -20,6 +20,7 @@ use crate::database::{
     taxon_lookup,
     FrameLoader,
     MaterializedView,
+    PgPool,
 };
 use crate::errors::Error;
 use crate::frames::IntoFrame;
@@ -150,6 +151,9 @@ pub struct Taxon {
     /// The external identifier of the source dataset as determined by ARGA
     dataset_id: String,
 
+    /// The internal identifier of the source dataset as determined by ARGA
+    dataset_uuid: Uuid,
+
     /// The name of the taxon. Should include author when possible
     scientific_name: String,
     /// The authorship of the taxon
@@ -174,136 +178,138 @@ pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Re
     import_compressed_csv_stream::<S, Record, TaxonOperation>(stream, dataset)
 }
 
-pub struct Taxa {
-    pub path: PathBuf,
-    pub dataset_version_id: Uuid,
+
+pub fn update() -> Result<(), Error> {
+    let pool = get_pool()?;
+    let mut conn = pool.get()?;
+
+    let total = {
+        use diesel::dsl::count_distinct;
+        use schema::taxa::dsl::*;
+
+        taxa.select(count_distinct(entity_id)).get_result::<i64>(&mut conn)?
+    };
+
+    let limit = 10_000;
+    let offsets: Vec<i64> = (0..total).step_by(limit as usize).collect();
+
+    offsets
+        .into_par_iter()
+        .try_for_each(|offset| reduce_and_update(pool.clone(), offset, limit))?;
+
+    Ok(())
 }
 
-impl Taxa {
-    /// Import the CSV file as taxon operations into the taxa_logs table.
-    ///
-    /// This will parse and decompose the CSV file, merge it with the existing taxa logs
-    /// and then insert them into the database, effectively updating taxa_logs with the
-    /// latest changes from the dataset.
-    pub fn import(&self) -> Result<(), Error> {
-        crate::import_csv_as_logs::<Record, TaxonOperation>(&self.path, &self.dataset_version_id)?;
-        info!("Taxa operations import finished");
-        Ok(())
-    }
+fn reduce_chunk(pool: PgPool, offset: i64, limit: i64) -> Result<Vec<Taxon>, Error> {
+    let mut conn = pool.get()?;
 
-    /// Reduce the entire taxa_logs table into a list of Taxon.
-    ///
-    /// This will generate a snapshot of every taxon built from all datasets
-    /// using the last-write-win CRDT map. The snapshot output is a reproducible
-    /// dataset that should be imported into the ARGA database and used by the application.
-    pub fn reduce() -> Result<Vec<Taxon>, Error> {
+    let operations = {
         use schema::taxa_logs::dsl::*;
         use schema::{dataset_versions, datasets};
 
-        let pool = get_pool()?;
-        let mut conn = pool.get()?;
+        // we first get all the entity ids within a specified range. this means that the
+        // query here has to return the same amount of results as a COUNT DISTINCT query otherwise
+        // some entities will be missed during the update. in particular make sure to always order
+        // the query results otherwise random entities might get pulled in since postgres doesnt sort by default
+        let entity_ids = taxa_logs
+            .select(entity_id)
+            .group_by(entity_id)
+            .order_by(entity_id)
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
 
-        let spinner = new_spinner("Loading taxa logs");
-        let ops = taxa_logs
+        // get the operations for the entities making sure to order by operation id so that
+        // the CRDT structs can do their thing
+        taxa_logs
             .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
             .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
-            .order(operation_id.asc())
-            .load::<TaxonOperationWithDataset>(&mut conn)?;
-        spinner.finish();
+            .filter(entity_id.eq_any(entity_ids))
+            .order_by((entity_id, operation_id))
+            .load::<TaxonOperationWithDataset>(&mut conn)?
+    };
 
-        let spinner = new_spinner("Grouping taxa logs");
-        let entities = group_operations(ops, vec![]);
-        spinner.finish();
+    // group the entity operations up and preparing it for use in the LWW map
+    let entities = group_operations(operations, vec![]);
+    let mut reduced_records = Vec::new();
 
-        let mut taxa = Vec::new();
+    // reduce all the operations by applying them to an empty record
+    // as per the last write wins policy
+    for (key, ops) in entities.into_iter() {
+        let mut map = Map::new(key);
+        map.reduce(&ops);
 
-        let bar = new_progress_bar(entities.len(), "Reducing operations");
-        for (key, ops) in entities.into_iter().progress_with(bar) {
-            let mut map = Map::new(key);
-            map.reduce(&ops);
-
-            // include the dataset global id in the reduced output to
-            // allow for multiple taxonomic systems
-            let mut taxon = Taxon::from(map);
-            if let Some(op) = ops.first() {
-                taxon.dataset_id.clone_from(&op.dataset.global_id);
-                taxa.push(taxon);
-            }
+        // include the dataset uuid in the reduced output to
+        // allow for multiple taxonomic systems
+        let mut record = Taxon::from(map);
+        if let Some(op) = ops.first() {
+            record.dataset_uuid.clone_from(&op.dataset.id);
+            reduced_records.push(record);
         }
-
-        // our taxa table has a unique constraint on scientific name and dataset id.
-        // some data sources will duplicate a taxon (separate record id) to record
-        // multiple accepted names. we sort and deduplicate it here since the relationship
-        // between taxa isn't of concern here, just the name itself.
-        let spinner = new_spinner("Deduplicating taxa");
-
-        taxa.sort_by(|a, b| {
-            a.dataset_id
-                .cmp(&b.dataset_id)
-                .then_with(|| a.scientific_name.cmp(&b.scientific_name))
-        });
-        taxa.dedup_by(|a, b| a.scientific_name == b.scientific_name && a.dataset_id == b.dataset_id);
-
-        spinner.finish();
-        Ok(taxa)
     }
 
-    pub fn update() -> Result<(), Error> {
+    // our taxa table has a unique constraint on scientific name and dataset id.
+    // some data sources will duplicate a taxon (separate record id) to record
+    // multiple accepted names. we sort and deduplicate it here since the relationship
+    // between taxa isn't of concern here, just the name itself.
+    reduced_records.sort_by(|a, b| {
+        a.dataset_id
+            .cmp(&b.dataset_id)
+            .then_with(|| a.scientific_name.cmp(&b.scientific_name))
+    });
+    reduced_records.dedup_by(|a, b| a.scientific_name == b.scientific_name && a.dataset_id == b.dataset_id);
+
+    Ok(reduced_records)
+}
+
+pub fn reduce_and_update(pool: PgPool, offset: i64, limit: i64) -> Result<(), Error> {
+    let reduced_records = reduce_chunk(pool.clone(), offset, limit)?;
+
+    let mut names = Vec::new();
+    let mut records = Vec::new();
+
+    for record in reduced_records {
+        names.push(models::Name {
+            id: Uuid::new_v4(),
+            scientific_name: record.scientific_name.clone(),
+            canonical_name: record.canonical_name.clone(),
+            authorship: record.scientific_name_authorship.clone(),
+        });
+
+        records.push(models::Taxon {
+            id: Uuid::new_v4(),
+            dataset_id: record.dataset_uuid,
+            parent_id: None,
+            entity_id: Some(record.entity_id),
+            status: record.taxonomic_status,
+            rank: record.taxon_rank,
+            scientific_name: record.scientific_name,
+            canonical_name: record.canonical_name,
+            authorship: record.scientific_name_authorship,
+            nomenclatural_code: record.nomenclatural_code,
+            citation: record.citation,
+            vernacular_names: None,
+            description: None,
+            remarks: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+    }
+
+    // import all the names in case they don't already exist. we use names to
+    // hang data on including taxonomy and is a key method of data discovery
+    names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
+    names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
+    super::names::import(pool.clone(), &names)?;
+
+    // postgres always creates a new row version so we cant get
+    // an actual figure of the amount of records changed
+    {
         use diesel::upsert::excluded;
         use schema::taxa::dsl::*;
-
-        let mut pool = get_pool()?;
         let mut conn = pool.get()?;
 
-        // reduce the logs and convert the record to the model equivalent. this means
-        // linking up the records to the database ids based on a lookup
-        let datasets = dataset_lookup(&mut pool)?;
-
-        let mut names = Vec::new();
-        let mut records = Vec::new();
-
-        for record in Self::reduce()? {
-            let dataset_uuid = datasets.get(&record.dataset_id).expect("Cannot find dataset");
-
-            names.push(models::Name {
-                id: Uuid::new_v4(),
-                scientific_name: record.scientific_name.clone(),
-                canonical_name: record.canonical_name.clone(),
-                authorship: record.scientific_name_authorship.clone(),
-            });
-
-            records.push(models::Taxon {
-                id: Uuid::new_v4(),
-                dataset_id: *dataset_uuid,
-                parent_id: None,
-                entity_id: Some(record.entity_id),
-                status: record.taxonomic_status,
-                rank: record.taxon_rank,
-                scientific_name: record.scientific_name,
-                canonical_name: record.canonical_name,
-                authorship: record.scientific_name_authorship,
-                nomenclatural_code: record.nomenclatural_code,
-                citation: record.citation,
-                vernacular_names: None,
-                description: None,
-                remarks: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            })
-        }
-
-        // import all the names in case they don't already exist. we use names to
-        // hang data on including taxonomy and is a key method of data discovery
-        names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
-        names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
-        super::names::import(&names)?;
-
-        // finally import the operations. if there is a conflict based on the operation_id
-        // then it is a duplicate operation so do nothing with it
-        let bar = new_progress_bar(records.len(), "Importing taxa");
         for chunk in records.chunks(1000) {
-            // postgres always creates a new row version so we cant get
-            // an actual figure of the amount of records changed
             diesel::insert_into(taxa)
                 .values(chunk)
                 .on_conflict((scientific_name, dataset_id))
@@ -322,101 +328,117 @@ impl Taxa {
                     updated_at.eq(excluded(updated_at)),
                 ))
                 .execute(&mut conn)?;
-
-            bar.inc(1000);
         }
-
-        bar.finish();
-        info!(total = records.len(), "Taxa import finished");
-        Ok(())
     }
 
-    /// Link all taxa to their parent taxon.
-    /// Due to bulk upserts we don't want to set the parent_id for taxa as it is self-referential.
-    /// It is important to link them up after import to enable the taxonomy DAG within the database.
-    /// This will also refresh the necessary materialized views in the database which may take a while.
-    pub fn link() -> Result<(), Error> {
+    Ok(())
+}
+
+
+pub fn link() -> Result<(), Error> {
+    let pool = get_pool()?;
+    let mut conn = pool.get()?;
+
+    let total = {
+        use diesel::dsl::count_distinct;
         use schema::taxa::dsl::*;
-        use schema::taxon_names;
 
-        let mut pool = get_pool()?;
-        let mut conn = pool.get()?;
+        taxa.select(count_distinct(entity_id)).get_result::<i64>(&mut conn)?
+    };
 
-        // we want to link all taxa datasets so include all of them
-        let datasets = dataset_lookup(&mut pool)?;
-        let dataset_ids = datasets.values().cloned().collect();
-        let names = name_lookup(&mut pool)?;
-        let all_taxa = taxon_lookup(&mut pool, &dataset_ids)?;
+    let limit = 10_000;
+    let offsets: Vec<i64> = (0..total).step_by(limit as usize).collect();
 
-        let mut links: Vec<(Uuid, Uuid)> = Vec::new();
-        let mut name_links: Vec<(Uuid, Uuid)> = Vec::new();
+    offsets
+        .into_par_iter()
+        .try_for_each(|offset| link_and_update(pool.clone(), offset, limit))?;
 
-        for record in Self::reduce()? {
-            if let Some(dataset_uuid) = datasets.get(&record.dataset_id) {
-                let taxon_lookup = (*dataset_uuid, record.scientific_name.clone());
-                if let Some(taxon_uuid) = all_taxa.get(&taxon_lookup) {
-                    // add a name link if the name can be found in the database
-                    if let Some(name_uuid) = names.get(&record.scientific_name) {
-                        name_links.push((*taxon_uuid, *name_uuid));
-                    }
+    Ok(())
+}
 
-                    // add a parent link if the taxon can be found in the database
-                    if let Some(parent) = record.parent_taxon {
-                        if let Some(parent_uuid) = all_taxa.get(&(*dataset_uuid, parent)) {
-                            links.push((*taxon_uuid, *parent_uuid));
-                        }
+pub fn link_and_update(mut pool: PgPool, offset: i64, limit: i64) -> Result<(), Error> {
+    let reduced_records = reduce_chunk(pool.clone(), offset, limit)?;
+
+    let mut dataset_ids: Vec<Uuid> = reduced_records.iter().map(|r| r.dataset_uuid).collect();
+    dataset_ids.sort();
+    dataset_ids.dedup();
+
+    let names = name_lookup(&mut pool)?;
+    let all_taxa = taxon_lookup(&mut pool, &dataset_ids)?;
+
+    let mut links: Vec<(Uuid, Uuid)> = Vec::new();
+    let mut name_links: Vec<(Uuid, Uuid)> = Vec::new();
+
+    for record in reduced_records {
+        let taxon_key = (record.dataset_uuid, record.scientific_name.clone());
+        let taxon_match = all_taxa.get(&taxon_key);
+        let name_match = names.get(&record.scientific_name);
+
+        match (taxon_match, name_match) {
+            (Some(taxon_uuid), Some(name_uuid)) => {
+                // add a name link if the name can be found in the database
+                name_links.push((*taxon_uuid, *name_uuid));
+
+                // add a parent link if the taxon can be found in the database
+                if let Some(parent) = record.parent_taxon {
+                    if let Some(parent_uuid) = all_taxa.get(&(record.dataset_uuid, parent)) {
+                        links.push((*taxon_uuid, *parent_uuid));
                     }
                 }
             }
-        }
 
-        // this closure allows us to get a new connection per worker thread
-        // that rayon spawns with the parallel iterator.
-        let get_conn = || pool.get().unwrap();
-
-        // we cant do a bulk update without resorting to upserts so instead
-        // we use rayon to parallelize to greatly increase the speed
-        let bar = new_progress_bar(links.len(), "Updating parent links");
-        links
-            .par_iter()
-            .progress_with(bar)
-            .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
-                diesel::update(taxa.filter(id.eq(taxon_uuid)))
-                    .set(parent_id.eq(parent_uuid))
-                    .execute(conn)
-                    .expect("Failed to update");
-            });
-
-        // all data links to a 'name' so that we can use different taxonomic systems represent
-        // the same 'concept' that other data refers to. the taxon_names table provides this
-        // and at a minimum every taxon should link to one name via this through table.
-        let bar = new_progress_bar(name_links.len(), "Importing taxon name links");
-        for chunk in name_links.chunks(10_000) {
-            let mut values = Vec::with_capacity(chunk.len());
-            for (taxon_uuid, name_uuid) in chunk {
-                values.push((taxon_names::taxon_id.eq(taxon_uuid), taxon_names::name_id.eq(name_uuid)))
-            }
-
-            diesel::insert_into(taxon_names::table)
-                .values(values)
-                .on_conflict((taxon_names::taxon_id, taxon_names::name_id))
-                .do_nothing()
-                .execute(&mut conn)?;
-
-            bar.inc(10_000);
-        }
-        bar.finish();
-
-        // refresh the views that cache taxa data
-        refresh_materialized_view(&mut pool, MaterializedView::TaxaDag)?;
-        refresh_materialized_view(&mut pool, MaterializedView::TaxaDagDown)?;
-        refresh_materialized_view(&mut pool, MaterializedView::TaxaTree)?;
-        refresh_materialized_view(&mut pool, MaterializedView::TaxaTreeStats)?;
-        refresh_materialized_view(&mut pool, MaterializedView::Species)?;
-
-        Ok(())
+            (None, None) => warn!("link failed. neither taxon nor name found in database"),
+            (Some(_), None) => warn!(record.scientific_name, "link failed. taxon found but not the name"),
+            (None, Some(_)) => warn!(record.scientific_name, "link failed. name found but not the taxon"),
+        };
     }
+
+    // this closure allows us to get a new connection per worker thread
+    // that rayon spawns with the parallel iterator.
+    let get_conn = || pool.get_timeout(std::time::Duration::from_secs(1)).unwrap();
+
+    // we cant do a bulk update without resorting to upserts so instead
+    // we use rayon to parallelize to greatly increase the speed
+    links
+        .par_iter()
+        .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
+            use schema::taxa::dsl::*;
+
+            diesel::update(taxa.filter(id.eq(taxon_uuid)))
+                .set(parent_id.eq(parent_uuid))
+                .execute(conn)
+                .expect("Failed to update");
+        });
+
+    // all data links to a 'name' so that we can use different taxonomic systems represent
+    // the same 'concept' that other data refers to. the taxon_names table provides this
+    // and at a minimum every taxon should link to one name via this through table.
+    for chunk in name_links.chunks(10_000) {
+        use schema::taxon_names::dsl::*;
+        let mut conn = pool.get()?;
+
+        let mut values = Vec::with_capacity(chunk.len());
+        for (taxon_uuid, name_uuid) in chunk {
+            values.push((taxon_id.eq(taxon_uuid), name_id.eq(name_uuid)))
+        }
+
+        diesel::insert_into(taxon_names)
+            .values(values)
+            .on_conflict((taxon_id, name_id))
+            .do_nothing()
+            .execute(&mut conn)?;
+    }
+
+    // refresh the views that cache taxa data
+    refresh_materialized_view(&mut pool, MaterializedView::TaxaDag)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaDagDown)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaTree)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaTreeStats)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::Species)?;
+
+    Ok(())
 }
+
 
 /// Converts a LWW CRDT map of taxon atoms to a Taxon record for serialisation
 impl From<Map<TaxonAtom>> for Taxon {
@@ -460,5 +482,57 @@ impl From<Map<TaxonAtom>> for Taxon {
         }
 
         taxon
+    }
+}
+
+
+pub trait Reducer {
+    type ReducedRecord;
+
+    fn total(&self) -> Result<i64, Error>;
+    fn reduce(&self) -> Result<Vec<Self::ReducedRecord>, Error>;
+}
+
+impl Reducer for DatabaseReducer<Taxon> {
+    type ReducedRecord = Taxon;
+
+    fn total(&self) -> Result<i64, Error> {
+        let mut conn = self.pool.get()?;
+
+        let total = {
+            use diesel::dsl::count_distinct;
+            use schema::taxa::dsl::*;
+
+            taxa.select(count_distinct(entity_id)).get_result::<i64>(&mut conn)?
+        };
+
+        Ok(total)
+    }
+
+    fn reduce(&self) -> Result<Vec<Self::ReducedRecord>, Error> {
+        todo!()
+    }
+}
+
+
+pub struct DatabaseReducer<R> {
+    pool: PgPool,
+    offset: i64,
+    limit: i64,
+    phantom_record: std::marker::PhantomData<R>,
+}
+
+impl<R> DatabaseReducer<R> {
+    pub fn new(pool: PgPool, offset: i64, limit: i64) -> DatabaseReducer<R> {
+        DatabaseReducer {
+            pool,
+            offset,
+            limit,
+            phantom_record: std::marker::PhantomData,
+        }
+    }
+
+    pub fn next_chunk() -> Result<Vec<R>, Error> {
+        Ok(vec![])
     }
 }

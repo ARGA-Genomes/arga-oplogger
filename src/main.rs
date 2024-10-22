@@ -125,11 +125,11 @@ fn main() -> Result<(), Error> {
         Commands::ImportFile(cmd) => match cmd {
             ImportCommand::Taxa(args) => {
                 let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
-                let taxa = Taxa {
-                    path: args.path.clone(),
-                    dataset_version_id: dataset_version.id,
-                };
-                taxa.import()?
+                // let taxa = Taxa {
+                //     path: args.path.clone(),
+                //     dataset_version_id: dataset_version.id,
+                // };
+                // taxa.import()?
             }
 
             ImportCommand::TaxonomicActs(args) => {
@@ -180,11 +180,11 @@ fn main() -> Result<(), Error> {
         },
         Commands::Reduce(cmd) => match cmd {
             ReduceCommand::Taxa => {
-                let records = Taxa::reduce()?;
-                let mut writer = csv::Writer::from_writer(std::io::stdout());
-                for record in records {
-                    writer.serialize(record)?;
-                }
+                // let records = Taxa::reduce()?;
+                // let mut writer = csv::Writer::from_writer(std::io::stdout());
+                // for record in records {
+                //     writer.serialize(record)?;
+                // }
             }
             ReduceCommand::TaxonomicActs => {
                 let records = TaxonomicActs::reduce()?;
@@ -197,8 +197,10 @@ fn main() -> Result<(), Error> {
 
         Commands::Update(cmd) => match cmd {
             UpdateCommand::Taxa => {
-                Taxa::update()?;
-                Taxa::link()?;
+                taxa::update()?;
+                taxa::link()?;
+                // Taxa::update()?;
+                // Taxa::link()?;
             }
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             // UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,

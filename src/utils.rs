@@ -205,6 +205,7 @@ pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
         "higher taxon" => Ok(HigherTaxon),
         "aggregate genera" => Ok(AggregateGenera),
         "aggregate species" => Ok(AggregateSpecies),
+        "supercohort" => Ok(Supercohort),
         "cohort" => Ok(Cohort),
         "subcohort" => Ok(Subcohort),
         "division" => Ok(Division),

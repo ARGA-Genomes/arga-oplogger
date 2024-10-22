@@ -2,17 +2,16 @@ use arga_core::{models, schema};
 use diesel::*;
 use tracing::info;
 
-use crate::database::get_pool;
+use crate::database::PgPool;
 use crate::errors::Error;
 use crate::utils::new_progress_bar;
 
 /// Import names if they are not already in the table. This is an upsert and will
 /// update the data if it matches on scientific name
-pub fn import(records: &[models::Name]) -> Result<(), Error> {
+pub fn import(pool: PgPool, records: &[models::Name]) -> Result<(), Error> {
     use diesel::upsert::excluded;
     use schema::names::dsl::*;
 
-    let pool = get_pool()?;
     let mut conn = pool.get()?;
 
     let mut total_imported = 0;
