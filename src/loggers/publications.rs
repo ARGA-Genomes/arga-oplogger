@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
 use arga_core::models::{self, PublicationAtom, PublicationOperation, PublicationType};
@@ -10,8 +12,8 @@ use serde::Deserialize;
 use crate::database::{FrameLoader, PgPool};
 use crate::errors::Error;
 use crate::frames::{FrameReader, IntoFrame};
-use crate::readers::OperationLoader;
-use crate::{frame_push_opt, import_frames_from_stream, FrameProgress};
+use crate::readers::{meta, OperationLoader};
+use crate::{frame_push_opt, import_compressed_csv_stream, import_frames_from_stream, FrameProgress};
 
 type PublicationFrame = DataFrame<PublicationAtom>;
 
@@ -54,7 +56,7 @@ impl OperationLoader for FrameLoader<PublicationOperation> {
 pub struct Record {
     pub entity_id: String,
     pub title: String,
-    pub authors: Vec<String>,
+    pub authors: Option<Vec<String>>,
     pub published_year: i32,
     pub source_url: String,
 
@@ -81,7 +83,7 @@ impl IntoFrame for Record {
         use PublicationAtom::*;
         frame.push(EntityId(self.entity_id));
         frame.push(Title(self.title));
-        frame.push(Authors(self.authors));
+        frame.push(Authors(self.authors.unwrap_or_default()));
         frame.push(PublishedYear(self.published_year));
         frame.push(SourceUrl(self.source_url));
         frame_push_opt!(frame, PublishedDate, self.published_date);
@@ -98,12 +100,17 @@ impl IntoFrame for Record {
 
 
 /// Import frames of publications from the stream
-pub fn import<R>(reader: R, pool: PgPool) -> Result<(), Error>
+pub fn import_frames<R>(reader: R, pool: PgPool) -> Result<(), Error>
 where
     R: FrameReader<Atom = models::PublicationAtom> + FrameProgress,
     R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
 {
     import_frames_from_stream::<models::PublicationOperation, R>(reader, pool)
+}
+
+
+pub fn import_archive<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Result<(), Error> {
+    import_compressed_csv_stream::<S, Record, PublicationOperation>(stream, dataset)
 }
 
 
@@ -215,7 +222,7 @@ impl From<Map<PublicationAtom>> for Record {
                 Empty => {}
                 EntityId(_) => {}
                 Title(value) => record.title = value,
-                Authors(value) => record.authors = value,
+                Authors(value) => record.authors = Some(value),
                 PublishedYear(value) => record.published_year = value,
                 SourceUrl(value) => record.source_url = value,
                 PublishedDate(value) => record.published_date = Some(value),
@@ -240,7 +247,7 @@ impl From<Record> for models::Publication {
             entity_id: value.entity_id,
 
             title: value.title,
-            authors: value.authors.into_iter().map(Some).collect(),
+            authors: value.authors.unwrap_or_default().into_iter().map(Some).collect(),
             published_year: value.published_year,
             published_date: value.published_date,
             language: value.language,

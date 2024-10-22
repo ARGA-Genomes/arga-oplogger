@@ -354,9 +354,11 @@ pub fn str_to_nomenclatural_act(value: &str) -> Result<NomenclaturalActType, Par
         "combinatio_nova" => Ok(CombinatioNova),
         "revived_status" => Ok(RevivedStatus),
         "name_usage" => Ok(NameUsage),
+        "names usage" => Ok(NameUsage),
         "new_species" => Ok(SpeciesNova),
         "genus_transfer" => Ok(CombinatioNova),
         "subgenus_placement" => Ok(SubgenusPlacement),
+        "original description" => Ok(SpeciesNova),
 
         val => Err(ParseError::InvalidValue(val.to_string())),
     }

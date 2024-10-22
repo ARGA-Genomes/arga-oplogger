@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
@@ -14,9 +15,9 @@ use crate::database::{get_pool, name_lookup, publication_lookup, FrameLoader, Pg
 use crate::errors::Error;
 use crate::frames::{FrameReader, IntoFrame};
 use crate::operations::group_operations;
-use crate::readers::OperationLoader;
+use crate::readers::{meta, OperationLoader};
 use crate::utils::{new_progress_bar, new_spinner, nomenclatural_act_from_str};
-use crate::{frame_push_opt, import_frames_from_stream, FrameProgress};
+use crate::{frame_push_opt, import_compressed_csv_stream, import_frames_from_stream, FrameProgress};
 
 type NomenclaturalActFrame = DataFrame<NomenclaturalActAtom>;
 
@@ -79,9 +80,12 @@ pub struct Record {
 
     /// The status of the taxon. Refer to TaxonomicStatus for all options
     #[serde(deserialize_with = "nomenclatural_act_from_str")]
+    #[serde(alias = "nomenclatural_act")]
     pub act: NomenclaturalActType,
 
+    #[serde(alias = "nomenclatural_act_publication")]
     pub publication: String,
+    #[serde(alias = "year_of_act")]
     pub publication_date: Option<String>,
 
     pub source_url: String,
@@ -125,12 +129,17 @@ impl IntoFrame for Record {
 
 
 /// Import frames of nomenclatural acts from the stream
-pub fn import<R>(reader: R, pool: PgPool) -> Result<(), Error>
+pub fn import_frames<R>(reader: R, pool: PgPool) -> Result<(), Error>
 where
     R: FrameReader<Atom = models::NomenclaturalActAtom> + FrameProgress,
     R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
 {
     import_frames_from_stream::<models::NomenclaturalActOperation, R>(reader, pool)
+}
+
+
+pub fn import_archive<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Result<(), Error> {
+    import_compressed_csv_stream::<S, Record, NomenclaturalActOperation>(stream, dataset)
 }
 
 

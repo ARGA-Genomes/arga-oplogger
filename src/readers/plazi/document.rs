@@ -39,13 +39,13 @@ pub fn import_all(input_dir: PathBuf, dataset_version: Uuid) -> Result<(), Error
             let fh = File::open(file)?;
             let reader = BufReader::new(fh);
             let document = DocumentReader::<publications::Record, _>::from_reader(reader, dataset_version)?;
-            publications::import(document, pool.clone())?;
+            publications::import_frames(document, pool.clone())?;
         }
         {
             let fh = File::open(file)?;
             let reader = BufReader::new(fh);
             let document = DocumentReader::<nomenclatural_acts::Record, _>::from_reader(reader, dataset_version)?;
-            nomenclatural_acts::import(document, pool.clone())?;
+            nomenclatural_acts::import_frames(document, pool.clone())?;
         }
     }
 
@@ -268,7 +268,7 @@ impl TryIntoRecord<publications::Record> for (DocumentHeader, Treatment) {
         let record = publications::Record {
             entity_id: document.entity_id,
             title: document.title,
-            authors: vec![document.authors],
+            authors: Some(vec![document.authors]),
             published_year: document.date_issued.parse::<i32>()?,
             source_url: document.id,
             published_date: None,

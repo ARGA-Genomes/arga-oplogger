@@ -13,6 +13,7 @@ use crate::{loggers, upsert_meta, ProgressStream};
 pub enum ImportType {
     Unknown,
     Taxa,
+    Publications,
     TaxonomicActs,
     NomenclaturalActs,
     Collections,
@@ -25,6 +26,7 @@ impl From<String> for ImportType {
 
         match value.as_str() {
             "taxa.csv.br" => Taxa,
+            "publications.csv.br" => Publications,
             "taxonomic_acts.csv.br" => TaxonomicActs,
             "nomenclatural_acts.csv.br" => NomenclaturalActs,
             "collections.csv.br" => Collections,
@@ -84,8 +86,9 @@ impl Archive {
             match import_type {
                 ImportType::Unknown => info!("Unknown type, skipping"),
                 ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
+                ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
                 ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
-                ImportType::NomenclaturalActs => todo!(),
+                ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
                 ImportType::Collections => todo!(),
                 ImportType::Sequences => todo!(),
             }
