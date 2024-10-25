@@ -291,6 +291,7 @@ pub fn str_to_taxonomic_rank(value: &str) -> Result<TaxonomicRank, ParseError> {
         "infraspecific name" => Ok(Infraspecies),
         "other" => Ok(Unranked),
 
+        "unplaced to" => Ok(Unranked),
         "" => Ok(Unranked),
 
         val => Err(ParseError::InvalidValue(val.to_string())),
