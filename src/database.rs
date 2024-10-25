@@ -48,7 +48,7 @@ pub fn get_pool() -> Result<PgPool, Error> {
     let manager = ConnectionManager::<PgConnection>::new(url);
     let pool = Pool::builder()
         .connection_timeout(Duration::from_secs(1))
-        .max_size(30)
+        .max_size(10)
         .build(manager)?;
     Ok(pool)
 }
