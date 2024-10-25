@@ -7,7 +7,7 @@ use arga_core::schema;
 use diesel::*;
 use rayon::prelude::*;
 use serde::Deserialize;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::database::{dataset_lookup, name_lookup, FrameLoader, PgPool, StringMap};
 use crate::errors::Error;
@@ -170,7 +170,7 @@ pub fn update() -> Result<(), Error> {
     let total_entities = pager.total()?;
     info!(total_entities, "Reducing specimens");
 
-    let reducer: DatabaseReducer<models::Specimen, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let reducer: DatabaseReducer<models::Specimen, _, _> = DatabaseReducer::new(pager, lookups);
     let mut conn = pool.get()?;
 
     for records in reducer.into_iter() {
@@ -178,10 +178,18 @@ pub fn update() -> Result<(), Error> {
             use diesel::upsert::excluded;
             use schema::specimens::dsl::*;
 
+            let mut valid_records = Vec::new();
+            for record in chunk {
+                match record {
+                    Ok(record) => valid_records.push(record),
+                    Err(err) => error!(?err),
+                }
+            }
+
             // postgres always creates a new row version so we cant get
             // an actual figure of the amount of records changed
             diesel::insert_into(specimens)
-                .values(chunk)
+                .values(valid_records)
                 .on_conflict(id)
                 .do_update()
                 .set((
@@ -233,9 +241,8 @@ struct Lookups {
 
 impl Reducer<Lookups> for models::Specimen {
     type Atom = SpecimenAtom;
-    type ReducedRecord = models::Specimen;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self::ReducedRecord, Error> {
+    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use SpecimenAtom::*;
 
         let mut record_id = None;

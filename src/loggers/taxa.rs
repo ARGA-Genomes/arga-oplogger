@@ -8,7 +8,7 @@ use diesel::*;
 use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::database::{
@@ -23,7 +23,7 @@ use crate::database::{
     StringMap,
     UuidStringMap,
 };
-use crate::errors::Error;
+use crate::errors::{Error, LookupError, ReduceError};
 use crate::frames::IntoFrame;
 use crate::operations::group_operations;
 use crate::readers::{meta, OperationLoader};
@@ -513,7 +513,7 @@ pub fn update() -> Result<(), Error> {
 
     info!(total_entities, "Reducing taxa");
 
-    let reducer: DatabaseReducer<models::Taxon, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let reducer: DatabaseReducer<models::Taxon, _, _> = DatabaseReducer::new(pager, lookups);
     let mut conn = pool.get()?;
 
     for records in reducer.into_iter() {
@@ -522,8 +522,16 @@ pub fn update() -> Result<(), Error> {
             use schema::names;
             use schema::taxa::dsl::*;
 
+            let mut valid_records = Vec::new();
+            for record in chunk {
+                match record {
+                    Ok(record) => valid_records.push(record.clone()),
+                    Err(err) => error!(?err),
+                }
+            }
+
             // insert the names as well as they'll need to be used for linking later
-            let mut names: Vec<models::Name> = chunk.iter().map(|r| models::Name::from(r.clone())).collect();
+            let mut names: Vec<models::Name> = valid_records.iter().map(|r| models::Name::from(r.clone())).collect();
             names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
             names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
 
@@ -539,14 +547,13 @@ pub fn update() -> Result<(), Error> {
 
             name_bar.inc(chunk.len() as u64);
 
-            let mut records = chunk.to_vec();
-            records.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
-            records.dedup_by(|a, b| a.dataset_id.eq(&b.dataset_id) && a.scientific_name.eq(&b.scientific_name));
+            valid_records.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
+            valid_records.dedup_by(|a, b| a.dataset_id.eq(&b.dataset_id) && a.scientific_name.eq(&b.scientific_name));
 
             // postgres always creates a new row version so we cant get
             // an actual figure of the amount of records changed
             diesel::insert_into(taxa)
-                .values(records)
+                .values(valid_records)
                 .on_conflict((scientific_name, dataset_id))
                 .do_update()
                 .set((
@@ -598,12 +605,20 @@ pub fn link() -> Result<(), Error> {
     let mut bars = UpdateBars::new(total_entities);
     bars.records.enable_steady_tick(std::time::Duration::from_millis(500));
 
-    let reducer: DatabaseReducer<TaxonLink, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let reducer: DatabaseReducer<TaxonLink, _, _> = DatabaseReducer::new(pager, lookups);
 
     let mut links: Vec<(Uuid, Uuid)> = Vec::new();
     let mut name_links: Vec<(Uuid, Uuid)> = Vec::new();
 
-    for records in reducer.into_iter() {
+    for chunk in reducer.into_iter() {
+        let mut records = Vec::new();
+        for record in chunk {
+            match record {
+                Ok(record) => records.push(record),
+                Err(err) => error!(?err),
+            }
+        }
+
         for record in records {
             name_links.push((record.taxon_id, record.name_id));
 
@@ -676,7 +691,6 @@ struct LinkLookups {
 
 impl Reducer<LinkLookups> for TaxonLink {
     type Atom = TaxonAtom;
-    type ReducedRecord = TaxonLink;
 
     fn reduce(frame: Map<Self::Atom>, lookups: &LinkLookups) -> Result<Self, Error> {
         use TaxonAtom::*;
@@ -730,9 +744,8 @@ impl Reducer<LinkLookups> for TaxonLink {
 
 impl Reducer<Lookups> for models::Taxon {
     type Atom = TaxonAtom;
-    type ReducedRecord = models::Taxon;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self::ReducedRecord, Error> {
+    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use TaxonAtom::*;
 
         let mut dataset_id = None;
@@ -780,14 +793,17 @@ impl Reducer<Lookups> for models::Taxon {
             }
         }
 
+        let dataset_id =
+            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = lookups
+            .datasets
+            .get(&dataset_id)
+            .ok_or(LookupError::Dataset(dataset_id))?;
+
         let record = models::Taxon {
             id: uuid::Uuid::new_v4(),
             entity_id: Some(frame.entity_id),
-            dataset_id: lookups
-                .datasets
-                .get(&dataset_id.unwrap())
-                .expect("dataset not found")
-                .clone(),
+            dataset_id: dataset_id.clone(),
             parent_id: None,
             status: taxonomic_status.expect("taxonomic status not found"),
             rank: taxonomic_rank.expect("taxonomic rank not found"),

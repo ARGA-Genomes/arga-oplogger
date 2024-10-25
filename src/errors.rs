@@ -26,6 +26,9 @@ pub enum Error {
 
     #[error(transparent)]
     Lookup(#[from] LookupError),
+
+    #[error(transparent)]
+    Reduce(#[from] ReduceError),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -59,4 +62,13 @@ pub enum NomenclaturalActTypeError {
 pub enum LookupError {
     #[error("cannot find source in database: {0}")]
     Source(String),
+
+    #[error("cannot find dataset in database: {0}")]
+    Dataset(String),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ReduceError {
+    #[error("The entity is incomplete and missing an required atom: entity_id: {0}, atom: {1}")]
+    MissingAtom(String, String),
 }
