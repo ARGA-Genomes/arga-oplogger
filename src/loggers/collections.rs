@@ -8,6 +8,7 @@ use diesel::*;
 use rayon::prelude::*;
 use serde::Deserialize;
 use tracing::info;
+use uuid::Uuid;
 
 use crate::database::{dataset_lookup, name_lookup, FrameLoader, PgPool, StringMap};
 use crate::errors::Error;
@@ -160,14 +161,14 @@ pub fn update() -> Result<(), Error> {
         datasets: dataset_lookup(&mut pool)?,
     };
 
-    let pager = FrameLoader::new(pool.clone());
-    let bar = new_progress_bar(pager.total()? as usize, "Importing specimens");
+    let pager: FrameLoader<SpecimenOperation> = FrameLoader::new(pool.clone());
+    let bar = new_progress_bar(pager.total()? as usize, "Updating specimens");
 
     // get the total amount of distinct entities in the log table. this allows
     // us to split up the reduction into many threads without loading all operations
     // into memory
     let total_entities = pager.total()?;
-    info!(total_entities, "Reducing collections");
+    info!(total_entities, "Reducing specimens");
 
     let reducer: DatabaseReducer<models::Specimen, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
     let mut conn = pool.get()?;

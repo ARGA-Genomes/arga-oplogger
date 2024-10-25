@@ -188,7 +188,7 @@ fn main() -> Result<(), Error> {
         Commands::Update(cmd) => match cmd {
             UpdateCommand::Taxa => {
                 taxa::update()?;
-                taxa::link()?;
+                taxa::link2()?;
             }
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,

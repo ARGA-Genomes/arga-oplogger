@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
 
+use crate::collections::{DatabaseReducer, EntityPager, Reducer};
 use crate::database::{
     dataset_lookup,
     get_pool,
@@ -21,6 +22,7 @@ use crate::database::{
     FrameLoader,
     MaterializedView,
     PgPool,
+    StringMap,
 };
 use crate::errors::Error;
 use crate::frames::IntoFrame;
@@ -32,6 +34,7 @@ use crate::utils::{
     taxonomic_rank_from_str,
     taxonomic_status_from_str,
     titleize_first_word,
+    UpdateBars,
 };
 use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
@@ -179,7 +182,7 @@ pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Re
 }
 
 
-pub fn update() -> Result<(), Error> {
+pub fn update2() -> Result<(), Error> {
     let pool = get_pool()?;
     let mut conn = pool.get()?;
 
@@ -335,7 +338,7 @@ pub fn reduce_and_update(pool: PgPool, offset: i64, limit: i64) -> Result<(), Er
 }
 
 
-pub fn link() -> Result<(), Error> {
+pub fn link2() -> Result<(), Error> {
     let pool = get_pool()?;
     let mut conn = pool.get()?;
 
@@ -352,6 +355,14 @@ pub fn link() -> Result<(), Error> {
     offsets
         .into_par_iter()
         .try_for_each(|offset| link_and_update(pool.clone(), offset, limit))?;
+
+
+    // refresh the views that cache taxa data
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaDag)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaDagDown)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaTree)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::TaxaTreeStats)?;
+    // refresh_materialized_view(&mut pool, MaterializedView::Species)?;
 
     Ok(())
 }
@@ -429,13 +440,6 @@ pub fn link_and_update(mut pool: PgPool, offset: i64, limit: i64) -> Result<(), 
             .execute(&mut conn)?;
     }
 
-    // refresh the views that cache taxa data
-    refresh_materialized_view(&mut pool, MaterializedView::TaxaDag)?;
-    // refresh_materialized_view(&mut pool, MaterializedView::TaxaDagDown)?;
-    // refresh_materialized_view(&mut pool, MaterializedView::TaxaTree)?;
-    // refresh_materialized_view(&mut pool, MaterializedView::TaxaTreeStats)?;
-    // refresh_materialized_view(&mut pool, MaterializedView::Species)?;
-
     Ok(())
 }
 
@@ -486,53 +490,226 @@ impl From<Map<TaxonAtom>> for Taxon {
 }
 
 
-pub trait Reducer {
-    type ReducedRecord;
+pub fn update() -> Result<(), Error> {
+    let mut pool = crate::database::get_pool()?;
 
-    fn total(&self) -> Result<i64, Error>;
-    fn reduce(&self) -> Result<Vec<Self::ReducedRecord>, Error>;
+    let lookups = Lookups {
+        datasets: dataset_lookup(&mut pool)?,
+    };
+
+    let pager: FrameLoader<TaxonOperation> = FrameLoader::new(pool.clone());
+
+    // get the total amount of distinct entities in the log table. this allows
+    // us to split up the reduction into many threads without loading all operations
+    // into memory
+    let total_entities = pager.total()? as usize;
+    let mut bars = UpdateBars::new(total_entities);
+    let name_bar = bars.add_progress_bar(total_entities, "Inserting names");
+
+    info!(total_entities, "Reducing taxa");
+
+    let reducer: DatabaseReducer<models::Taxon, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let mut conn = pool.get()?;
+
+    for records in reducer.into_iter() {
+        for chunk in records.chunks(1000) {
+            use diesel::upsert::excluded;
+            use schema::names;
+            use schema::taxa::dsl::*;
+
+            // insert the names as well as they'll need to be used for linking later
+            let mut names: Vec<models::Name> = chunk.iter().map(|r| models::Name::from(r.clone())).collect();
+            names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
+            names.dedup_by(|a, b| a.scientific_name.eq(&b.scientific_name));
+
+            diesel::insert_into(names::table)
+                .values(names)
+                .on_conflict(names::scientific_name)
+                .do_update()
+                .set((
+                    names::canonical_name.eq(excluded(names::canonical_name)),
+                    names::authorship.eq(excluded(names::authorship)),
+                ))
+                .execute(&mut conn)?;
+
+            name_bar.inc(chunk.len() as u64);
+
+            // postgres always creates a new row version so we cant get
+            // an actual figure of the amount of records changed
+            diesel::insert_into(taxa)
+                .values(chunk)
+                .on_conflict((scientific_name, dataset_id))
+                .do_update()
+                .set((
+                    entity_id.eq(excluded(entity_id)),
+                    status.eq(excluded(status)),
+                    rank.eq(excluded(rank)),
+                    canonical_name.eq(excluded(canonical_name)),
+                    authorship.eq(excluded(authorship)),
+                    nomenclatural_code.eq(excluded(nomenclatural_code)),
+                    citation.eq(excluded(citation)),
+                    vernacular_names.eq(excluded(vernacular_names)),
+                    description.eq(excluded(description)),
+                    remarks.eq(excluded(remarks)),
+                    updated_at.eq(excluded(updated_at)),
+                ))
+                .execute(&mut conn)?;
+
+            bars.records.inc(chunk.len() as u64);
+        }
+    }
+
+    bars.finish();
+    info!("Finished reducing and updating taxa");
+
+    Ok(())
 }
 
-impl Reducer for DatabaseReducer<Taxon> {
-    type ReducedRecord = Taxon;
+
+pub fn link() -> Result<(), Error> {
+    let mut pool = crate::database::get_pool()?;
+
+    let lookups = Lookups {
+        datasets: dataset_lookup(&mut pool)?,
+    };
+
+    let pager: FrameLoader<TaxonOperation> = FrameLoader::new(pool.clone());
+
+    // get the total amount of distinct entities in the log table. this allows
+    // us to split up the reduction into many threads without loading all operations
+    // into memory
+    let total_entities = pager.total()? as usize;
+    let mut bars = UpdateBars::new(total_entities);
+    let name_bar = bars.add_progress_bar(total_entities, "Inserting names");
+
+    info!(total_entities, "Reducing taxa");
+
+    let reducer: DatabaseReducer<models::Taxon, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let mut conn = pool.get()?;
+
+    Ok(())
+}
+
+
+struct Lookups {
+    datasets: StringMap,
+}
+
+impl Reducer<Lookups> for models::Taxon {
+    type Atom = TaxonAtom;
+    type ReducedRecord = models::Taxon;
+
+    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self::ReducedRecord, Error> {
+        use TaxonAtom::*;
+
+        let mut taxon_id = None;
+        let mut parent_taxon = None;
+        let mut scientific_name = None;
+        let mut canonical_name = None;
+        let mut authorship = None;
+        let mut nomenclatural_code = None;
+        let mut taxonomic_rank = None;
+        let mut taxonomic_status = None;
+        let mut citation = None;
+        let mut references = None;
+        let mut last_updated = None;
+
+        for atom in frame.atoms.into_values() {
+            match atom {
+                Empty => {}
+                TaxonId(value) => taxon_id = Some(value),
+                ParentTaxon(value) => parent_taxon = Some(value),
+                ScientificName(value) => scientific_name = Some(value),
+                CanonicalName(value) => canonical_name = Some(value),
+                Authorship(value) => authorship = Some(value),
+                NomenclaturalCode(value) => nomenclatural_code = Some(value),
+                TaxonomicRank(value) => taxonomic_rank = Some(value),
+                TaxonomicStatus(value) => taxonomic_status = Some(value),
+                Citation(value) => citation = Some(value),
+                References(value) => references = Some(value),
+                LastUpdated(value) => last_updated = Some(value),
+
+                // we want this atom for provenance and reproduction with the hash
+                // generation but we don't need to actually use it
+                EntityId(_value) => {}
+
+                // fields currently not supported
+                AcceptedNameUsageId(_) => {}
+                ParentNameUsageId(_) => {}
+                AcceptedNameUsage(_) => {}
+                ParentNameUsage(_) => {}
+                NomenclaturalStatus(_) => {}
+                NamePublishedIn(_) => {}
+                NamePublishedInYear(_) => {}
+                NamePublishedInUrl(_) => {}
+            }
+        }
+
+        let record = models::Taxon {
+            id: uuid::Uuid::new_v4(),
+            entity_id: Some(frame.entity_id),
+            dataset_id: lookups
+                .datasets
+                .get("ARGA:TL:0001000")
+                .expect("dataset not found")
+                .clone(),
+            parent_id: None,
+            status: taxonomic_status.expect("taxonomic status not found"),
+            rank: taxonomic_rank.expect("taxonomic rank not found"),
+            scientific_name: scientific_name.expect("scientific name not found"),
+            canonical_name: canonical_name.expect("canonical name not found"),
+            authorship,
+            nomenclatural_code: nomenclatural_code.expect("nomenclatural code not found"),
+            citation,
+            vernacular_names: None,
+            description: None,
+            remarks: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        Ok(record)
+    }
+}
+
+
+impl EntityPager for FrameLoader<TaxonOperation> {
+    type Operation = models::TaxonOperation;
 
     fn total(&self) -> Result<i64, Error> {
         let mut conn = self.pool.get()?;
 
         let total = {
             use diesel::dsl::count_distinct;
-            use schema::taxa::dsl::*;
-
-            taxa.select(count_distinct(entity_id)).get_result::<i64>(&mut conn)?
+            use schema::taxa_logs::dsl::*;
+            taxa_logs
+                .select(count_distinct(entity_id))
+                .get_result::<i64>(&mut conn)?
         };
 
         Ok(total)
     }
 
-    fn reduce(&self) -> Result<Vec<Self::ReducedRecord>, Error> {
-        todo!()
-    }
-}
+    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error> {
+        use schema::taxa_logs::dsl::*;
+        let mut conn = self.pool.get()?;
 
+        let limit = 10_000;
+        let offset = page as i64 * limit;
 
-pub struct DatabaseReducer<R> {
-    pool: PgPool,
-    offset: i64,
-    limit: i64,
-    phantom_record: std::marker::PhantomData<R>,
-}
+        let entity_ids = taxa_logs
+            .select(entity_id)
+            .group_by(entity_id)
+            .order_by(entity_id)
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
 
-impl<R> DatabaseReducer<R> {
-    pub fn new(pool: PgPool, offset: i64, limit: i64) -> DatabaseReducer<R> {
-        DatabaseReducer {
-            pool,
-            offset,
-            limit,
-            phantom_record: std::marker::PhantomData,
-        }
-    }
+        let operations = taxa_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order_by((entity_id, operation_id))
+            .load::<TaxonOperation>(&mut conn)?;
 
-    pub fn next_chunk() -> Result<Vec<R>, Error> {
-        Ok(vec![])
+        Ok(operations)
     }
 }

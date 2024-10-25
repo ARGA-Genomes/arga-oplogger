@@ -103,6 +103,42 @@ impl FrameImportBars {
     }
 }
 
+
+#[derive(Clone)]
+pub struct UpdateBars {
+    bars: MultiProgress,
+    pub records: ProgressBar,
+    others: Vec<ProgressBar>,
+}
+
+impl UpdateBars {
+    pub fn new(total: usize) -> UpdateBars {
+        let bars = MultiProgress::new();
+        let records = new_progress_bar(total, "Updating");
+        bars.add(records.clone());
+
+        UpdateBars {
+            bars,
+            records,
+            others: vec![],
+        }
+    }
+
+    pub fn add_progress_bar(&mut self, total: usize, message: &str) -> ProgressBar {
+        let bar = new_progress_bar(total, message);
+        self.bars.add(bar.clone());
+        self.others.push(bar.clone());
+        bar
+    }
+
+    pub fn finish(&self) {
+        self.records.finish();
+        for bar in &self.others {
+            bar.finish();
+        }
+    }
+}
+
 /// Convert the case of the first word to a title case.
 /// This will also replace all unicode whitespaces with ASCII compatible whitespace
 /// which means it also works as a sort of normalizer
