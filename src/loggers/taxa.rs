@@ -708,15 +708,28 @@ impl Reducer<LinkLookups> for TaxonLink {
             }
         }
 
-        let dataset_id = dataset_id.expect("dataset id atom not found");
-        let scientific_name = scientific_name.expect("scientific name atom not found");
+        let dataset_id =
+            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = lookups
+            .datasets
+            .get(&dataset_id)
+            .ok_or(LookupError::Dataset(dataset_id))?
+            .clone();
 
-        let dataset_id = lookups.datasets.get(&dataset_id).expect("dataset not found").clone();
+        let scientific_name =
+            scientific_name.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "ScientificName".to_string()))?;
+        let name_id = lookups
+            .names
+            .get(&scientific_name)
+            .ok_or(LookupError::Name(scientific_name.clone()))?
+            .clone();
 
-        let name_id = lookups.names.get(&scientific_name).expect("name not found").clone();
-
-        let taxon_key = (dataset_id, scientific_name);
-        let taxon_id = lookups.taxa.get(&taxon_key).expect("taxon not found").clone();
+        let taxon_key = (dataset_id, scientific_name.clone());
+        let taxon_id = lookups
+            .taxa
+            .get(&taxon_key)
+            .ok_or(LookupError::Name(scientific_name.clone()))?
+            .clone();
 
         let parent_id = match parent_taxon {
             Some(parent) => {

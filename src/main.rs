@@ -44,6 +44,10 @@ pub enum Commands {
     #[command(subcommand)]
     Update(UpdateCommand),
 
+    /// Link records with the latest reduced data
+    #[command(subcommand)]
+    Link(LinkCommand),
+
     /// Specific commands for the plazi treatment bank dataset
     #[command(subcommand)]
     Plazi(PlaziCommand),
@@ -103,6 +107,13 @@ pub enum UpdateCommand {
     /// Update collections with the reduced logs
     Collections,
 }
+
+#[derive(clap::Subcommand)]
+pub enum LinkCommand {
+    /// Link the taxa with the reduced logs
+    Taxa,
+}
+
 
 #[derive(clap::Subcommand)]
 pub enum PlaziCommand {
@@ -187,14 +198,15 @@ fn main() -> Result<(), Error> {
         },
 
         Commands::Update(cmd) => match cmd {
-            UpdateCommand::Taxa => {
-                taxa::update()?;
-                taxa::link()?;
-            }
+            UpdateCommand::Taxa => taxa::update()?,
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
             UpdateCommand::Collections => collections::update()?,
+        },
+
+        Commands::Link(cmd) => match cmd {
+            LinkCommand::Taxa => taxa::link()?,
         },
 
         Commands::Plazi(cmd) => match cmd {

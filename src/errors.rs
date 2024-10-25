@@ -65,6 +65,9 @@ pub enum LookupError {
 
     #[error("cannot find dataset in database: {0}")]
     Dataset(String),
+
+    #[error("cannot find name in database: {0}")]
+    Name(String),
 }
 
 #[derive(thiserror::Error, Debug)]
