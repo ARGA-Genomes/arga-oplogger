@@ -25,7 +25,7 @@ impl OperationLoader for FrameLoader<SpecimenOperation> {
 
     fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<SpecimenOperation>, Error> {
         use schema::specimen_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         let ops = specimen_logs
             .filter(entity_id.eq_any(entity_ids))
@@ -37,7 +37,7 @@ impl OperationLoader for FrameLoader<SpecimenOperation> {
 
     fn upsert_operations(&self, operations: &[SpecimenOperation]) -> Result<usize, Error> {
         use schema::specimen_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         // if there is a conflict based on the operation id then it is a duplicate
         // operation so do nothing with it

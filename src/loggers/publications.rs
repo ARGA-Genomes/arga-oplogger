@@ -23,7 +23,7 @@ impl OperationLoader for FrameLoader<PublicationOperation> {
 
     fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<PublicationOperation>, Error> {
         use schema::publication_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         let ops = publication_logs
             .filter(entity_id.eq_any(entity_ids))
@@ -35,7 +35,7 @@ impl OperationLoader for FrameLoader<PublicationOperation> {
 
     fn upsert_operations(&self, operations: &[PublicationOperation]) -> Result<usize, Error> {
         use schema::publication_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         // if there is a conflict based on the operation id then it is a duplicate
         // operation so do nothing with it
@@ -123,7 +123,7 @@ pub fn update() -> Result<(), Error> {
     use schema::publication_logs::dsl::*;
 
     let pool = crate::database::get_pool()?;
-    let mut conn = pool.get_timeout(std::time::Duration::from_secs(1))?;
+    let mut conn = pool.get()?;
 
     // get the total amount of distinct entities in the log table. this allows
     // us to split up the reduction into many threads without loading all operations
@@ -148,7 +148,7 @@ pub fn reduce_and_update(offset: i64, limit: i64, pool: crate::database::PgPool)
     use schema::publication_logs::dsl::*;
     use schema::publications as pubs;
 
-    let mut conn = pool.get_timeout(std::time::Duration::from_secs(1))?;
+    let mut conn = pool.get()?;
 
     // we first get all the entity ids within a specified range. this means that the
     // query here has to return the same amount of results as a COUNT DISTINCT query otherwise

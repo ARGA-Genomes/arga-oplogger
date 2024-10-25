@@ -42,7 +42,7 @@ impl OperationLoader for FrameLoader<TaxonomicActOperation> {
 
     fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonomicActOperation>, Error> {
         use schema::taxonomic_act_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         let ops = taxonomic_act_logs
             .filter(entity_id.eq_any(entity_ids))
@@ -54,7 +54,7 @@ impl OperationLoader for FrameLoader<TaxonomicActOperation> {
 
     fn upsert_operations(&self, operations: &[TaxonomicActOperation]) -> Result<usize, Error> {
         use schema::taxonomic_act_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         // if there is a conflict based on the operation id then it is a duplicate
         // operation so do nothing with it
@@ -277,7 +277,7 @@ pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Re
 
 pub fn update() -> Result<(), Error> {
     let pool = get_pool()?;
-    let mut conn = pool.get_timeout(std::time::Duration::from_secs(1))?;
+    let mut conn = pool.get()?;
 
     // let loader: FrameLoader<TaxonomicActOperationWithDataset> = FrameLoader::new(pool);
 
@@ -304,7 +304,7 @@ pub fn update() -> Result<(), Error> {
 }
 
 pub fn reduce_and_update(mut pool: PgPool, offset: i64, limit: i64) -> Result<(), Error> {
-    let mut conn = pool.get_timeout(std::time::Duration::from_secs(1))?;
+    let mut conn = pool.get()?;
 
     let operations = {
         use schema::taxonomic_act_logs::dsl::*;

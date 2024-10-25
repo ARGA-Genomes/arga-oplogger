@@ -27,7 +27,7 @@ impl OperationLoader for FrameLoader<NomenclaturalActOperation> {
 
     fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<NomenclaturalActOperation>, Error> {
         use schema::nomenclatural_act_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         let ops = nomenclatural_act_logs
             .filter(entity_id.eq_any(entity_ids))
@@ -39,7 +39,7 @@ impl OperationLoader for FrameLoader<NomenclaturalActOperation> {
 
     fn upsert_operations(&self, operations: &[NomenclaturalActOperation]) -> Result<usize, Error> {
         use schema::nomenclatural_act_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         // if there is a conflict based on the operation id then it is a duplicate
         // operation so do nothing with it
