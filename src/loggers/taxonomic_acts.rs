@@ -17,20 +17,22 @@ use diesel::*;
 use indicatif::ProgressIterator;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use crate::database::{dataset_lookup, get_pool, taxon_lookup, FrameLoader, PgPool};
-use crate::errors::Error;
+use crate::database::{dataset_lookup, get_pool, taxon_lookup, FrameLoader, PgPool, StringMap, UuidStringMap};
+use crate::errors::{Error, LookupError, ReduceError};
 use crate::frames::IntoFrame;
 use crate::operations::group_operations;
 use crate::readers::{meta, OperationLoader};
+use crate::reducer::{DatabaseReducer, EntityPager, Reducer};
 use crate::utils::{
     date_time_from_str_opt,
     new_progress_bar,
     new_spinner,
     taxonomic_status_from_str,
     titleize_first_word,
+    UpdateBars,
 };
 use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
@@ -198,14 +200,13 @@ struct Record {
     /// This is a kind of global permanent identifier
     entity_id: String,
 
+    /// The dataset id used to isolate the taxa from other systems
+    dataset_id: String,
+
     /// The name of the taxon. Should include author when possible
     scientific_name: String,
     /// The name of the taxon currently accepted. Should include author when possible
     accepted_usage_taxon: Option<String>,
-
-    /// The status of the taxon. Refer to TaxonomicStatus for all options
-    #[serde(deserialize_with = "taxonomic_status_from_str")]
-    taxonomic_status: TaxonomicStatus,
 
     /// The timestamp of when the record was created at the data source
     #[serde(deserialize_with = "date_time_from_str_opt")]
@@ -233,6 +234,7 @@ impl IntoFrame for Record {
 
         frame.push(EntityId(self.entity_id));
         frame.push(Taxon(titleize_first_word(&self.scientific_name)));
+        frame.push(DatasetId(self.dataset_id));
         frame_push_opt!(frame, AcceptedTaxon, accepted_taxon_usage);
         frame_push_opt!(frame, SourceUrl, self.references);
         frame_push_opt!(frame, CreatedAt, self.created_at);
@@ -275,7 +277,7 @@ pub fn import<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Re
     import_compressed_csv_stream::<S, Record, TaxonomicActOperation>(stream, dataset)
 }
 
-pub fn update() -> Result<(), Error> {
+pub fn update2() -> Result<(), Error> {
     let pool = get_pool()?;
     let mut conn = pool.get()?;
 
@@ -573,9 +575,188 @@ impl From<Map<TaxonomicActAtom>> for TaxonomicAct {
                 // we want this atom for provenance and reproduction with the hash
                 // generation but we don't need to actually use it
                 EntityId(_value) => {}
+                DatasetId(_value) => {}
             }
         }
 
         act
+    }
+}
+
+
+pub fn update() -> Result<(), Error> {
+    let mut pool = crate::database::get_pool()?;
+
+    let datasets = dataset_lookup(&mut pool)?;
+    let dataset_ids: Vec<Uuid> = datasets.values().map(|id| id.clone()).collect();
+
+    let lookups = Lookups {
+        datasets,
+        taxa: taxon_lookup(&mut pool, &dataset_ids)?,
+    };
+
+    let pager: FrameLoader<TaxonomicActOperation> = FrameLoader::new(pool.clone());
+
+    // get the total amount of distinct entities in the log table. this allows
+    // us to split up the reduction into many threads without loading all operations
+    // into memory
+    let total_entities = pager.total()? as usize;
+    let bars = UpdateBars::new(total_entities);
+
+    info!(total_entities, "Reducing taxonomic acts");
+
+    let reducer: DatabaseReducer<models::TaxonomicAct, _, _> = DatabaseReducer::new(pager, lookups);
+    let mut conn = pool.get()?;
+
+    for records in reducer.into_iter() {
+        for chunk in records.chunks(1000) {
+            use diesel::upsert::excluded;
+            use schema::taxonomic_acts::dsl::*;
+
+            let mut valid_records = Vec::new();
+            for record in chunk {
+                match record {
+                    Ok(record) => valid_records.push(record),
+                    Err(err) => error!(?err),
+                }
+            }
+
+            // postgres always creates a new row version so we cant get
+            // an actual figure of the amount of records changed
+            diesel::insert_into(taxonomic_acts)
+                .values(valid_records)
+                .on_conflict(entity_id)
+                .do_update()
+                .set((
+                    taxon_id.eq(excluded(taxon_id)),
+                    accepted_taxon_id.eq(excluded(accepted_taxon_id)),
+                    source_url.eq(excluded(source_url)),
+                    updated_at.eq(excluded(updated_at)),
+                    data_created_at.eq(excluded(data_created_at)),
+                    data_updated_at.eq(excluded(data_updated_at)),
+                ))
+                .execute(&mut conn)?;
+
+            bars.records.inc(chunk.len() as u64);
+        }
+    }
+
+    bars.finish();
+    info!("Finished reducing and updating taxonomic acts");
+
+    Ok(())
+}
+
+
+impl EntityPager for FrameLoader<TaxonomicActOperation> {
+    type Operation = models::TaxonomicActOperation;
+
+    fn total(&self) -> Result<i64, Error> {
+        let mut conn = self.pool.get()?;
+
+        let total = {
+            use diesel::dsl::count_distinct;
+            use schema::taxonomic_act_logs::dsl::*;
+            taxonomic_act_logs
+                .select(count_distinct(entity_id))
+                .get_result::<i64>(&mut conn)?
+        };
+
+        Ok(total)
+    }
+
+    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error> {
+        use schema::taxonomic_act_logs::dsl::*;
+        let mut conn = self.pool.get()?;
+
+        let limit = 10_000;
+        let offset = page as i64 * limit;
+
+        let entity_ids = taxonomic_act_logs
+            .select(entity_id)
+            .group_by(entity_id)
+            .order_by(entity_id)
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
+
+        let operations = taxonomic_act_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order_by((entity_id, operation_id))
+            .load::<TaxonomicActOperation>(&mut conn)?;
+
+        Ok(operations)
+    }
+}
+
+
+struct Lookups {
+    datasets: StringMap,
+    taxa: UuidStringMap,
+}
+
+impl Reducer<Lookups> for models::TaxonomicAct {
+    type Atom = TaxonomicActAtom;
+
+    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
+        use TaxonomicActAtom::*;
+
+        let mut dataset_id = None;
+        let mut taxon = None;
+        let mut accepted_taxon = None;
+        let mut source_url = None;
+        let mut data_created_at = None;
+        let mut data_updated_at = None;
+
+        for atom in frame.atoms.into_values() {
+            match atom {
+                DatasetId(value) => dataset_id = Some(value),
+                Taxon(value) => taxon = Some(value),
+                AcceptedTaxon(value) => accepted_taxon = Some(value),
+                SourceUrl(value) => source_url = Some(value),
+                CreatedAt(value) => data_created_at = Some(value),
+                UpdatedAt(value) => data_updated_at = Some(value),
+                _ => {}
+            }
+        }
+
+        let dataset_id =
+            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = lookups
+            .datasets
+            .get(&dataset_id)
+            .ok_or(LookupError::Dataset(dataset_id))?
+            .clone();
+
+        let taxon = taxon.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "Taxon".to_string()))?;
+        let accepted_taxon =
+            accepted_taxon.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "AcceptedTaxon".to_string()))?;
+
+        let taxon_key = (dataset_id, taxon.clone());
+        let taxon_id = lookups
+            .taxa
+            .get(&taxon_key)
+            .ok_or(LookupError::Name(taxon.clone()))?
+            .clone();
+
+        let accepted_taxon_key = (dataset_id, accepted_taxon.clone());
+        let accepted_taxon_id = lookups
+            .taxa
+            .get(&accepted_taxon_key)
+            .ok_or(LookupError::Name(accepted_taxon.clone()))?
+            .clone();
+
+        let record = models::TaxonomicAct {
+            id: Uuid::new_v4(),
+            entity_id: frame.entity_id,
+            taxon_id,
+            accepted_taxon_id: Some(accepted_taxon_id),
+            source_url,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            data_created_at,
+            data_updated_at,
+        };
+        Ok(record)
     }
 }

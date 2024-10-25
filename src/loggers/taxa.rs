@@ -594,7 +594,7 @@ pub fn link() -> Result<(), Error> {
         taxa: taxon_lookup(&mut pool, &dataset_ids)?,
     };
 
-    let pager: FrameLoader<TaxonOperationWithDataset> = FrameLoader::new(pool.clone());
+    let pager: FrameLoader<TaxonOperation> = FrameLoader::new(pool.clone());
 
     // get the total amount of distinct entities in the log table. this allows
     // us to split up the reduction into many threads without loading all operations
@@ -873,51 +873,6 @@ impl EntityPager for FrameLoader<TaxonOperation> {
             .filter(entity_id.eq_any(entity_ids))
             .order_by((entity_id, operation_id))
             .load::<TaxonOperation>(&mut conn)?;
-
-        Ok(operations)
-    }
-}
-
-impl EntityPager for FrameLoader<TaxonOperationWithDataset> {
-    type Operation = models::TaxonOperationWithDataset;
-
-    fn total(&self) -> Result<i64, Error> {
-        let mut conn = self.pool.get()?;
-
-        let total = {
-            use diesel::dsl::count_distinct;
-            use schema::taxa_logs::dsl::*;
-            taxa_logs
-                .select(count_distinct(entity_id))
-                .get_result::<i64>(&mut conn)?
-        };
-
-        Ok(total)
-    }
-
-    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error> {
-        use schema::taxa_logs::dsl::*;
-        use schema::{dataset_versions, datasets};
-
-        let mut conn = self.pool.get()?;
-
-        let limit = 10_000;
-        let offset = page as i64 * limit;
-
-        let entity_ids = taxa_logs
-            .select(entity_id)
-            .group_by(entity_id)
-            .order_by(entity_id)
-            .offset(offset)
-            .limit(limit)
-            .into_boxed();
-
-        let operations = taxa_logs
-            .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
-            .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
-            .filter(entity_id.eq_any(entity_ids))
-            .order_by((entity_id, operation_id))
-            .load::<TaxonOperationWithDataset>(&mut conn)?;
 
         Ok(operations)
     }

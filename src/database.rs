@@ -47,7 +47,7 @@ pub fn get_pool() -> Result<PgPool, Error> {
     let url = arga_core::get_database_url();
     let manager = ConnectionManager::<PgConnection>::new(url);
     let pool = Pool::builder()
-        .connection_timeout(Duration::from_secs(1))
+        .connection_timeout(Duration::from_secs(20))
         .max_size(10)
         .build(manager)?;
     Ok(pool)
