@@ -1,18 +1,16 @@
 use std::io::Read;
-use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
 use arga_core::models::{self, TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
 use arga_core::schema;
 use diesel::*;
-use indicatif::{ParallelProgressIterator, ProgressIterator};
+use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::collections::{DatabaseReducer, EntityPager, Reducer};
 use crate::database::{
     dataset_lookup,
     get_pool,
@@ -23,19 +21,14 @@ use crate::database::{
     MaterializedView,
     PgPool,
     StringMap,
+    UuidStringMap,
 };
 use crate::errors::Error;
 use crate::frames::IntoFrame;
 use crate::operations::group_operations;
 use crate::readers::{meta, OperationLoader};
-use crate::utils::{
-    new_progress_bar,
-    new_spinner,
-    taxonomic_rank_from_str,
-    taxonomic_status_from_str,
-    titleize_first_word,
-    UpdateBars,
-};
+use crate::reducer::{DatabaseReducer, EntityPager, Reducer};
+use crate::utils::{taxonomic_rank_from_str, taxonomic_status_from_str, titleize_first_word, UpdateBars};
 use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
 type TaxonFrame = DataFrame<TaxonAtom>;
@@ -46,7 +39,7 @@ impl OperationLoader for FrameLoader<TaxonOperation> {
 
     fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonOperation>, Error> {
         use schema::taxa_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         let ops = taxa_logs
             .filter(entity_id.eq_any(entity_ids))
@@ -58,7 +51,7 @@ impl OperationLoader for FrameLoader<TaxonOperation> {
 
     fn upsert_operations(&self, operations: &[Self::Operation]) -> Result<usize, Error> {
         use schema::taxa_logs::dsl::*;
-        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+        let mut conn = self.pool.get()?;
 
         // if there is a conflict based on the operation id then it is a duplicate
         // operation so do nothing with it
@@ -80,6 +73,9 @@ struct Record {
     /// Any value that uniquely identifies this record through its lifetime.
     /// This is a kind of global permanent identifier
     entity_id: String,
+
+    /// The dataset id used to isolate the taxa from other systems
+    dataset_id: String,
 
     /// The record id assigned by the dataset
     taxon_id: String,
@@ -122,6 +118,7 @@ impl IntoFrame for Record {
     fn into_frame(self, mut frame: TaxonFrame) -> TaxonFrame {
         use TaxonAtom::*;
         frame.push(EntityId(self.entity_id));
+        frame.push(DatasetId(self.dataset_id));
         frame.push(TaxonId(self.taxon_id));
         frame.push(ScientificName(titleize_first_word(&self.scientific_name)));
         frame.push(CanonicalName(titleize_first_word(&self.canonical_name)));
@@ -174,6 +171,13 @@ pub struct Taxon {
     citation: Option<String>,
     references: Option<String>,
     last_updated: Option<String>,
+}
+
+pub struct TaxonLink {
+    dataset_id: Uuid,
+    name_id: Uuid,
+    taxon_id: Uuid,
+    parent_id: Option<Uuid>,
 }
 
 
@@ -474,6 +478,7 @@ impl From<Map<TaxonAtom>> for Taxon {
                 EntityId(_value) => {}
 
                 // fields currently not supported
+                DatasetId(_value) => {}
                 AcceptedNameUsageId(_value) => {}
                 ParentNameUsageId(_value) => {}
                 AcceptedNameUsage(_value) => {}
@@ -573,30 +578,154 @@ pub fn update() -> Result<(), Error> {
 pub fn link() -> Result<(), Error> {
     let mut pool = crate::database::get_pool()?;
 
-    let lookups = Lookups {
-        datasets: dataset_lookup(&mut pool)?,
+    let datasets = dataset_lookup(&mut pool)?;
+    let dataset_ids: Vec<Uuid> = datasets.values().map(|id| id.clone()).collect();
+
+    let lookups = LinkLookups {
+        datasets,
+        names: name_lookup(&mut pool)?,
+        taxa: taxon_lookup(&mut pool, &dataset_ids)?,
     };
 
-    let pager: FrameLoader<TaxonOperation> = FrameLoader::new(pool.clone());
+    let pager: FrameLoader<TaxonOperationWithDataset> = FrameLoader::new(pool.clone());
 
     // get the total amount of distinct entities in the log table. this allows
     // us to split up the reduction into many threads without loading all operations
     // into memory
     let total_entities = pager.total()? as usize;
+    info!(total_entities, "Linking taxa");
+
     let mut bars = UpdateBars::new(total_entities);
-    let name_bar = bars.add_progress_bar(total_entities, "Inserting names");
+    bars.records.enable_steady_tick(std::time::Duration::from_millis(500));
 
-    info!(total_entities, "Reducing taxa");
+    let reducer: DatabaseReducer<TaxonLink, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
 
-    let reducer: DatabaseReducer<models::Taxon, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let mut links: Vec<(Uuid, Uuid)> = Vec::new();
+    let mut name_links: Vec<(Uuid, Uuid)> = Vec::new();
+
+    for records in reducer.into_iter() {
+        for record in records {
+            name_links.push((record.taxon_id, record.name_id));
+
+            if let Some(parent_id) = record.parent_id {
+                links.push((record.taxon_id, parent_id));
+            }
+
+            bars.records.inc(1);
+        }
+    }
+
+    let name_bar = bars.add_progress_bar(total_entities, "Updating name links");
+    let parent_bar = bars.add_progress_bar(links.len(), "Updating parent links");
+
+    // this closure allows us to get a new connection per worker thread
+    // that rayon spawns with the parallel iterator.
+    let get_conn = || pool.get_timeout(std::time::Duration::from_secs(1)).unwrap();
+
+    // we cant do a bulk update without resorting to upserts so instead
+    // we use rayon to parallelize to greatly increase the speed
+    links
+        .par_iter()
+        .progress_with(parent_bar)
+        .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
+            use schema::taxa::dsl::*;
+
+            diesel::update(taxa.filter(id.eq(taxon_uuid)))
+                .set(parent_id.eq(parent_uuid))
+                .execute(conn)
+                .expect("Failed to update");
+        });
+
+
     let mut conn = pool.get()?;
 
+    // all data links to a 'name' so that we can use different taxonomic systems represent
+    // the same 'concept' that other data refers to. the taxon_names table provides this
+    // and at a minimum every taxon should link to one name via this through table.
+    for chunk in name_links.chunks(10_000) {
+        use schema::taxon_names::dsl::*;
+
+        let mut values = Vec::with_capacity(chunk.len());
+        for (taxon_uuid, name_uuid) in chunk {
+            values.push((taxon_id.eq(taxon_uuid), name_id.eq(name_uuid)))
+        }
+
+        diesel::insert_into(taxon_names)
+            .values(values)
+            .on_conflict((taxon_id, name_id))
+            .do_nothing()
+            .execute(&mut conn)?;
+
+        name_bar.inc(chunk.len() as u64);
+    }
+
+    bars.finish();
     Ok(())
 }
 
 
 struct Lookups {
     datasets: StringMap,
+}
+
+struct LinkLookups {
+    datasets: StringMap,
+    taxa: UuidStringMap,
+    names: StringMap,
+}
+
+impl Reducer<LinkLookups> for TaxonLink {
+    type Atom = TaxonAtom;
+    type ReducedRecord = TaxonLink;
+
+    fn reduce(frame: Map<Self::Atom>, lookups: &LinkLookups) -> Result<Self, Error> {
+        use TaxonAtom::*;
+
+        let mut dataset_id = None;
+        let mut parent_taxon = None;
+        let mut scientific_name = None;
+
+        for atom in frame.atoms.into_values() {
+            match atom {
+                DatasetId(value) => dataset_id = Some(value),
+                ParentTaxon(value) => parent_taxon = Some(value),
+                ScientificName(value) => scientific_name = Some(value),
+                _ => {}
+            }
+        }
+
+        let dataset_id = dataset_id.expect("dataset id atom not found");
+        let scientific_name = scientific_name.expect("scientific name atom not found");
+
+        let dataset_id = lookups.datasets.get(&dataset_id).expect("dataset not found").clone();
+
+        let name_id = lookups.names.get(&scientific_name).expect("name not found").clone();
+
+        let taxon_key = (dataset_id, scientific_name);
+        let taxon_id = lookups.taxa.get(&taxon_key).expect("taxon not found").clone();
+
+        let parent_id = match parent_taxon {
+            Some(parent) => {
+                let parent_key = (dataset_id, parent);
+                match lookups.taxa.get(&parent_key) {
+                    Some(parent_id) => Some(parent_id.clone()),
+                    None => {
+                        warn!(?parent_key, "Cannot find parent taxon. Skipping");
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+
+        let record = TaxonLink {
+            dataset_id,
+            taxon_id,
+            name_id,
+            parent_id,
+        };
+        Ok(record)
+    }
 }
 
 impl Reducer<Lookups> for models::Taxon {
@@ -606,6 +735,7 @@ impl Reducer<Lookups> for models::Taxon {
     fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self::ReducedRecord, Error> {
         use TaxonAtom::*;
 
+        let mut dataset_id = None;
         let mut taxon_id = None;
         let mut parent_taxon = None;
         let mut scientific_name = None;
@@ -621,6 +751,7 @@ impl Reducer<Lookups> for models::Taxon {
         for atom in frame.atoms.into_values() {
             match atom {
                 Empty => {}
+                DatasetId(value) => dataset_id = Some(value),
                 TaxonId(value) => taxon_id = Some(value),
                 ParentTaxon(value) => parent_taxon = Some(value),
                 ScientificName(value) => scientific_name = Some(value),
@@ -654,7 +785,7 @@ impl Reducer<Lookups> for models::Taxon {
             entity_id: Some(frame.entity_id),
             dataset_id: lookups
                 .datasets
-                .get("ARGA:TL:0001000")
+                .get(&dataset_id.unwrap())
                 .expect("dataset not found")
                 .clone(),
             parent_id: None,
@@ -713,6 +844,51 @@ impl EntityPager for FrameLoader<TaxonOperation> {
             .filter(entity_id.eq_any(entity_ids))
             .order_by((entity_id, operation_id))
             .load::<TaxonOperation>(&mut conn)?;
+
+        Ok(operations)
+    }
+}
+
+impl EntityPager for FrameLoader<TaxonOperationWithDataset> {
+    type Operation = models::TaxonOperationWithDataset;
+
+    fn total(&self) -> Result<i64, Error> {
+        let mut conn = self.pool.get()?;
+
+        let total = {
+            use diesel::dsl::count_distinct;
+            use schema::taxa_logs::dsl::*;
+            taxa_logs
+                .select(count_distinct(entity_id))
+                .get_result::<i64>(&mut conn)?
+        };
+
+        Ok(total)
+    }
+
+    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error> {
+        use schema::taxa_logs::dsl::*;
+        use schema::{dataset_versions, datasets};
+
+        let mut conn = self.pool.get()?;
+
+        let limit = 10_000;
+        let offset = page as i64 * limit;
+
+        let entity_ids = taxa_logs
+            .select(entity_id)
+            .group_by(entity_id)
+            .order_by(entity_id)
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
+
+        let operations = taxa_logs
+            .inner_join(dataset_versions::table.on(dataset_version_id.eq(dataset_versions::id)))
+            .inner_join(datasets::table.on(dataset_versions::dataset_id.eq(datasets::id)))
+            .filter(entity_id.eq_any(entity_ids))
+            .order_by((entity_id, operation_id))
+            .load::<TaxonOperationWithDataset>(&mut conn)?;
 
         Ok(operations)
     }

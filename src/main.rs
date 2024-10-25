@@ -5,6 +5,7 @@ mod frames;
 mod loggers;
 mod operations;
 mod readers;
+mod reducer;
 mod utils;
 
 use std::path::PathBuf;
@@ -188,7 +189,7 @@ fn main() -> Result<(), Error> {
         Commands::Update(cmd) => match cmd {
             UpdateCommand::Taxa => {
                 taxa::update()?;
-                taxa::link2()?;
+                taxa::link()?;
             }
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,

@@ -8,12 +8,12 @@ use diesel::*;
 use rayon::prelude::*;
 use serde::Deserialize;
 use tracing::info;
-use uuid::Uuid;
 
 use crate::database::{dataset_lookup, name_lookup, FrameLoader, PgPool, StringMap};
 use crate::errors::Error;
 use crate::frames::IntoFrame;
 use crate::readers::{meta, OperationLoader};
+use crate::reducer::{DatabaseReducer, EntityPager, Reducer};
 use crate::utils::{new_progress_bar, titleize_first_word};
 use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
@@ -231,13 +231,6 @@ struct Lookups {
 }
 
 
-pub trait Reducer<L> {
-    type Atom: Clone + ToString + PartialEq;
-    type ReducedRecord;
-
-    fn reduce(frame: Map<Self::Atom>, lookups: &L) -> Result<Self::ReducedRecord, Error>;
-}
-
 impl Reducer<Lookups> for models::Specimen {
     type Atom = SpecimenAtom;
     type ReducedRecord = models::Specimen;
@@ -356,73 +349,6 @@ impl Reducer<Lookups> for models::Specimen {
     }
 }
 
-
-pub struct DatabaseReducer<R, P, L> {
-    pool: PgPool,
-    pager: P,
-    lookups: L,
-    current_page: usize,
-    phantom_record: std::marker::PhantomData<R>,
-}
-
-impl<R, P, L> DatabaseReducer<R, P, L>
-where
-    R: Reducer<L>,
-    P: EntityPager,
-    P::Operation: Clone + LogOperation<R::Atom>,
-{
-    pub fn new(pool: PgPool, pager: P, lookups: L) -> DatabaseReducer<R, P, L> {
-        DatabaseReducer {
-            pool,
-            pager,
-            lookups,
-            current_page: 0,
-            phantom_record: std::marker::PhantomData,
-        }
-    }
-
-    pub fn next_entity_chunk(&mut self) -> Result<Vec<R::ReducedRecord>, Error> {
-        let operations = self.pager.load_entity_operations(self.current_page)?;
-        self.current_page += 1;
-
-        // group up the operations so we can iterate by entity frames
-        let entities = crate::operations::group_operations(operations, vec![]);
-        let mut records = Vec::new();
-
-        // create an LWW map for each entity and reduce it
-        for (key, ops) in entities.into_iter() {
-            let mut map = Map::new(key);
-            map.reduce(&ops);
-            let record = R::reduce(map, &self.lookups)?;
-            records.push(record);
-        }
-
-        Ok(records)
-    }
-}
-
-
-impl<R, P, L> Iterator for DatabaseReducer<R, P, L>
-where
-    R: Reducer<L>,
-    P: EntityPager,
-    P::Operation: Clone + LogOperation<R::Atom>,
-{
-    type Item = Vec<R::ReducedRecord>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let chunk = self.next_entity_chunk().unwrap();
-        if !chunk.is_empty() { Some(chunk) } else { None }
-    }
-}
-
-
-pub trait EntityPager {
-    type Operation;
-
-    fn total(&self) -> Result<i64, Error>;
-    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error>;
-}
 
 impl EntityPager for FrameLoader<SpecimenOperation> {
     type Operation = models::SpecimenOperation;
