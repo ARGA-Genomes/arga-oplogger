@@ -128,7 +128,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 [[package]]
 name = "arga-core"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#f6460cb54fab6d984ee4b458aceab8baac1ffaa1"
+source = "git+https://github.com/ARGA-Genomes/arga-backend.git#4dea82e09dfdd1e881079fb7178b92f01ac740bf"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -379,7 +379,7 @@ dependencies = [
 [[package]]
 name = "core-derive"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#f6460cb54fab6d984ee4b458aceab8baac1ffaa1"
+source = "git+https://github.com/ARGA-Genomes/arga-backend.git#4dea82e09dfdd1e881079fb7178b92f01ac740bf"
 dependencies = [
  "proc-macro2",
  "quote",

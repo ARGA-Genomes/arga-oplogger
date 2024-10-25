@@ -358,7 +358,13 @@ pub fn str_to_nomenclatural_act(value: &str) -> Result<NomenclaturalActType, Par
         "new_species" => Ok(SpeciesNova),
         "genus_transfer" => Ok(CombinatioNova),
         "subgenus_placement" => Ok(SubgenusPlacement),
-        "original description" => Ok(SpeciesNova),
+        "original description" => Ok(OriginalDescription),
+        "redescription" => Ok(Redescription),
+        "demotion" => Ok(Demotion),
+        "promotion" => Ok(Promotion),
+        "synonymisation" => Ok(Synonymisation),
+        "heterotypic synonymy" => Ok(HeterotypicSynonymy),
+        "homotypic synonymy" => Ok(HomotypicSynonymy),
 
         val => Err(ParseError::InvalidValue(val.to_string())),
     }

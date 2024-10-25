@@ -57,14 +57,18 @@ pub struct Record {
     pub entity_id: String,
     pub title: String,
     pub authors: Option<Vec<String>>,
-    pub published_year: i32,
-    pub source_url: String,
 
+    #[serde(alias = "publication_year")]
+    pub published_year: i32,
+    #[serde(alias = "publication_url")]
+    pub source_url: String,
     pub published_date: Option<DateTime<Utc>>,
     pub language: Option<String>,
     pub publisher: Option<String>,
     pub doi: Option<String>,
+
     pub publication_type: Option<PublicationType>,
+    #[serde(alias = "full_citation")]
     pub citation: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,

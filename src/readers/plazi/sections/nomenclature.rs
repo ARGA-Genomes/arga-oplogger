@@ -47,6 +47,13 @@ pub fn acted_on_from_name(name: &TaxonomicName) -> Result<String, NomenclaturalA
         NomenclaturalActType::RevivedStatus => name.base_authority_name.clone().unwrap_or(biota),
         NomenclaturalActType::NameUsage => name.scientific_name(),
         NomenclaturalActType::SubgenusPlacement => name.base_authority_name.clone().unwrap_or(biota),
+        NomenclaturalActType::OriginalDescription => name.scientific_name(),
+        NomenclaturalActType::Redescription => name.scientific_name(),
+        NomenclaturalActType::Demotion => name.scientific_name(),
+        NomenclaturalActType::Promotion => name.scientific_name(),
+        NomenclaturalActType::Synonymisation => name.scientific_name(),
+        NomenclaturalActType::HeterotypicSynonymy => name.scientific_name(),
+        NomenclaturalActType::HomotypicSynonymy => name.scientific_name(),
     };
     Ok(acted_on)
 }

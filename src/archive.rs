@@ -17,6 +17,7 @@ pub enum ImportType {
     TaxonomicActs,
     NomenclaturalActs,
     Collections,
+    Accessions,
     Sequences,
 }
 
@@ -30,6 +31,7 @@ impl From<String> for ImportType {
             "taxonomic_acts.csv.br" => TaxonomicActs,
             "nomenclatural_acts.csv.br" => NomenclaturalActs,
             "collections.csv.br" => Collections,
+            "accessions.csv.br" => Accessions,
             "sequences.csv.br" => Sequences,
             _ => Unknown,
         }
@@ -89,7 +91,8 @@ impl Archive {
                 ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
                 ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
                 ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
-                ImportType::Collections => todo!(),
+                ImportType::Collections => loggers::collections::import_archive(stream, &meta.dataset)?,
+                ImportType::Accessions => todo!(),
                 ImportType::Sequences => todo!(),
             }
         }

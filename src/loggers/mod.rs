@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use arga_core::crdt::{DataFrame, DataFrameOperation};
 use arga_core::models::{self, LogOperation};
 use arga_core::schema;
-pub use collections::Collections;
 use diesel::*;
 use indicatif::ProgressBarIter;
 pub use nomenclatural_acts::NomenclaturalActs;

@@ -1,18 +1,20 @@
-use std::path::PathBuf;
+use std::io::Read;
 
+use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
-use arga_core::models::{SpecimenAtom, SpecimenOperation};
+use arga_core::models::{self, LogOperation, SpecimenAtom, SpecimenOperation};
 use arga_core::schema;
 use diesel::*;
+use rayon::prelude::*;
 use serde::Deserialize;
 use tracing::info;
-use uuid::Uuid;
 
-use crate::database::FrameLoader;
+use crate::database::{dataset_lookup, name_lookup, FrameLoader, PgPool, StringMap};
 use crate::errors::Error;
 use crate::frames::IntoFrame;
-use crate::readers::OperationLoader;
-use crate::utils::titleize_first_word;
+use crate::readers::{meta, OperationLoader};
+use crate::utils::{new_progress_bar, titleize_first_word};
+use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
 
 type SpecimenFrame = DataFrame<SpecimenAtom>;
 
@@ -58,10 +60,12 @@ struct Record {
     entity_id: String,
     record_id: String,
     scientific_name: String,
-    // canonical_name: Option<String>,
-    // type_status: Option<String>,
-    // institution_name: Option<String>,
-    // institution_code: Option<String>,
+    canonical_name: String,
+    scientific_name_authority: Option<String>,
+
+    type_status: Option<String>,
+    institution_name: Option<String>,
+    institution_code: Option<String>,
     // collection_code: Option<String>,
     // catalog_number: Option<String>,
     // collected_by: Option<String>,
@@ -133,19 +137,329 @@ impl IntoFrame for Record {
         frame.push(EntityId(self.entity_id));
         frame.push(RecordId(self.record_id));
         frame.push(ScientificName(titleize_first_word(&self.scientific_name)));
+        frame.push(CanonicalName(titleize_first_word(&self.canonical_name)));
+        frame_push_opt!(frame, Authorship, self.scientific_name_authority);
+        frame_push_opt!(frame, TypeStatus, self.type_status);
+        frame_push_opt!(frame, InstitutionName, self.institution_name);
+        frame_push_opt!(frame, InstitutionCode, self.institution_code);
         frame
     }
 }
 
-pub struct Collections {
-    pub path: PathBuf,
-    pub dataset_version_id: Uuid,
+
+pub fn import_archive<S: Read + FrameProgress>(stream: S, dataset: &meta::Dataset) -> Result<(), Error> {
+    import_compressed_csv_stream::<S, Record, SpecimenOperation>(stream, dataset)
 }
 
-impl Collections {
-    pub fn import(&self) -> Result<(), Error> {
-        crate::import_csv_as_logs::<Record, SpecimenOperation>(&self.path, &self.dataset_version_id)?;
-        info!("Specimen logs imported");
-        Ok(())
+
+pub fn update() -> Result<(), Error> {
+    let mut pool = crate::database::get_pool()?;
+
+    let lookups = Lookups {
+        names: name_lookup(&mut pool)?,
+        datasets: dataset_lookup(&mut pool)?,
+    };
+
+    let pager = FrameLoader::new(pool.clone());
+    let bar = new_progress_bar(pager.total()? as usize, "Importing specimens");
+
+    // get the total amount of distinct entities in the log table. this allows
+    // us to split up the reduction into many threads without loading all operations
+    // into memory
+    let total_entities = pager.total()?;
+    info!(total_entities, "Reducing collections");
+
+    let reducer: DatabaseReducer<models::Specimen, _, _> = DatabaseReducer::new(pool.clone(), pager, lookups);
+    let mut conn = pool.get()?;
+
+    for records in reducer.into_iter() {
+        for chunk in records.chunks(1000) {
+            use diesel::upsert::excluded;
+            use schema::specimens::dsl::*;
+
+            // postgres always creates a new row version so we cant get
+            // an actual figure of the amount of records changed
+            diesel::insert_into(specimens)
+                .values(chunk)
+                .on_conflict(id)
+                .do_update()
+                .set((
+                    entity_id.eq(excluded(entity_id)),
+                    name_id.eq(excluded(name_id)),
+                    record_id.eq(excluded(record_id)),
+                    material_sample_id.eq(excluded(material_sample_id)),
+                    organism_id.eq(excluded(organism_id)),
+                    institution_name.eq(excluded(institution_name)),
+                    institution_code.eq(excluded(institution_code)),
+                    collection_code.eq(excluded(collection_code)),
+                    recorded_by.eq(excluded(recorded_by)),
+                    identified_by.eq(excluded(identified_by)),
+                    identified_date.eq(excluded(identified_date)),
+                    type_status.eq(excluded(type_status)),
+                    locality.eq(excluded(locality)),
+                    country.eq(excluded(country)),
+                    country_code.eq(excluded(country_code)),
+                    state_province.eq(excluded(state_province)),
+                    county.eq(excluded(county)),
+                    municipality.eq(excluded(municipality)),
+                    latitude.eq(excluded(latitude)),
+                    longitude.eq(excluded(longitude)),
+                    elevation.eq(excluded(elevation)),
+                    depth.eq(excluded(depth)),
+                    elevation_accuracy.eq(excluded(elevation_accuracy)),
+                    depth_accuracy.eq(excluded(depth_accuracy)),
+                    location_source.eq(excluded(location_source)),
+                    details.eq(excluded(details)),
+                    remarks.eq(excluded(remarks)),
+                    identification_remarks.eq(excluded(identification_remarks)),
+                ))
+                .execute(&mut conn)?;
+
+            bar.inc(chunk.len() as u64);
+        }
+    }
+
+    bar.finish();
+    Ok(())
+}
+
+
+struct Lookups {
+    names: StringMap,
+    datasets: StringMap,
+}
+
+
+pub trait Reducer<L> {
+    type Atom: Clone + ToString + PartialEq;
+    type ReducedRecord;
+
+    fn reduce(frame: Map<Self::Atom>, lookups: &L) -> Result<Self::ReducedRecord, Error>;
+}
+
+impl Reducer<Lookups> for models::Specimen {
+    type Atom = SpecimenAtom;
+    type ReducedRecord = models::Specimen;
+
+    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self::ReducedRecord, Error> {
+        use SpecimenAtom::*;
+
+        let mut record_id = None;
+        let mut material_sample_id = None;
+        let mut organism_id = None;
+        let mut scientific_name = None;
+        let mut canonical_name = None;
+        let mut authorship = None;
+        let mut institution_name = None;
+        let mut institution_code = None;
+        let mut collection_code = None;
+        let mut recorded_by = None;
+        let mut identified_by = None;
+        let mut identified_date = None;
+        let mut type_status = None;
+        let mut locality = None;
+        let mut country = None;
+        let mut country_code = None;
+        let mut state_province = None;
+        let mut county = None;
+        let mut municipality = None;
+        let mut latitude = None;
+        let mut longitude = None;
+        let mut elevation = None;
+        let mut depth = None;
+        let mut elevation_accuracy = None;
+        let mut depth_accuracy = None;
+        let mut location_source = None;
+        let mut details = None;
+        let mut remarks = None;
+        let mut identification_remarks = None;
+
+        for atom in frame.atoms.into_values() {
+            match atom {
+                Empty => {}
+                EntityId(_) => {}
+                RecordId(value) => record_id = Some(value),
+                MaterialSampleId(value) => material_sample_id = Some(value),
+                OrganismId(value) => organism_id = Some(value),
+                ScientificName(value) => scientific_name = Some(value),
+                CanonicalName(value) => canonical_name = Some(value),
+                Authorship(value) => authorship = Some(value),
+                InstitutionName(value) => institution_name = Some(value),
+                InstitutionCode(value) => institution_code = Some(value),
+                CollectionCode(value) => collection_code = Some(value),
+                RecordedBy(value) => recorded_by = Some(value),
+                IdentifiedBy(value) => identified_by = Some(value),
+                IdentifiedDate(value) => identified_date = Some(value),
+                TypeStatus(value) => type_status = Some(value),
+                Locality(value) => locality = Some(value),
+                Country(value) => country = Some(value),
+                CountryCode(value) => country_code = Some(value),
+                StateProvince(value) => state_province = Some(value),
+                County(value) => county = Some(value),
+                Municipality(value) => municipality = Some(value),
+                Latitude(value) => latitude = Some(value),
+                Longitude(value) => longitude = Some(value),
+                Elevation(value) => elevation = Some(value),
+                Depth(value) => depth = Some(value),
+                ElevationAccuracy(value) => elevation_accuracy = Some(value),
+                DepthAccuracy(value) => depth_accuracy = Some(value),
+                LocationSource(value) => location_source = Some(value),
+                Details(value) => details = Some(value),
+                Remarks(value) => remarks = Some(value),
+                IdentificationRemarks(value) => identification_remarks = Some(value),
+            }
+        }
+
+        let record = models::Specimen {
+            id: uuid::Uuid::new_v4(),
+            entity_id: Some(frame.entity_id),
+            dataset_id: lookups
+                .datasets
+                .get("ARGA:TL:0001000")
+                .expect("dataset not found")
+                .clone(),
+            name_id: lookups
+                .names
+                .get(&scientific_name.expect("scientific_name not found"))
+                .expect("name not found")
+                .clone(),
+            record_id: record_id.expect("record_id not found"),
+            material_sample_id,
+            organism_id,
+            institution_name,
+            institution_code,
+            collection_code,
+            recorded_by,
+            identified_by,
+            identified_date,
+            type_status,
+            locality,
+            country,
+            country_code,
+            state_province,
+            county,
+            municipality,
+            latitude,
+            longitude,
+            elevation,
+            depth,
+            elevation_accuracy,
+            depth_accuracy,
+            location_source,
+            details,
+            remarks,
+            identification_remarks,
+        };
+
+        Ok(record)
+    }
+}
+
+
+pub struct DatabaseReducer<R, P, L> {
+    pool: PgPool,
+    pager: P,
+    lookups: L,
+    current_page: usize,
+    phantom_record: std::marker::PhantomData<R>,
+}
+
+impl<R, P, L> DatabaseReducer<R, P, L>
+where
+    R: Reducer<L>,
+    P: EntityPager,
+    P::Operation: Clone + LogOperation<R::Atom>,
+{
+    pub fn new(pool: PgPool, pager: P, lookups: L) -> DatabaseReducer<R, P, L> {
+        DatabaseReducer {
+            pool,
+            pager,
+            lookups,
+            current_page: 0,
+            phantom_record: std::marker::PhantomData,
+        }
+    }
+
+    pub fn next_entity_chunk(&mut self) -> Result<Vec<R::ReducedRecord>, Error> {
+        let operations = self.pager.load_entity_operations(self.current_page)?;
+        self.current_page += 1;
+
+        // group up the operations so we can iterate by entity frames
+        let entities = crate::operations::group_operations(operations, vec![]);
+        let mut records = Vec::new();
+
+        // create an LWW map for each entity and reduce it
+        for (key, ops) in entities.into_iter() {
+            let mut map = Map::new(key);
+            map.reduce(&ops);
+            let record = R::reduce(map, &self.lookups)?;
+            records.push(record);
+        }
+
+        Ok(records)
+    }
+}
+
+
+impl<R, P, L> Iterator for DatabaseReducer<R, P, L>
+where
+    R: Reducer<L>,
+    P: EntityPager,
+    P::Operation: Clone + LogOperation<R::Atom>,
+{
+    type Item = Vec<R::ReducedRecord>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let chunk = self.next_entity_chunk().unwrap();
+        if !chunk.is_empty() { Some(chunk) } else { None }
+    }
+}
+
+
+pub trait EntityPager {
+    type Operation;
+
+    fn total(&self) -> Result<i64, Error>;
+    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error>;
+}
+
+impl EntityPager for FrameLoader<SpecimenOperation> {
+    type Operation = models::SpecimenOperation;
+
+    fn total(&self) -> Result<i64, Error> {
+        let mut conn = self.pool.get()?;
+
+        let total = {
+            use diesel::dsl::count_distinct;
+            use schema::specimen_logs::dsl::*;
+            specimen_logs
+                .select(count_distinct(entity_id))
+                .get_result::<i64>(&mut conn)?
+        };
+
+        Ok(total)
+    }
+
+    fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error> {
+        use schema::specimen_logs::dsl::*;
+        let mut conn = self.pool.get()?;
+
+        let limit = 10_000;
+        let offset = page as i64 * limit;
+
+        let entity_ids = specimen_logs
+            .select(entity_id)
+            .group_by(entity_id)
+            .order_by(entity_id)
+            .offset(offset)
+            .limit(limit)
+            .into_boxed();
+
+        let operations = specimen_logs
+            .filter(entity_id.eq_any(entity_ids))
+            .order_by((entity_id, operation_id))
+            .load::<SpecimenOperation>(&mut conn)?;
+
+        Ok(operations)
     }
 }

@@ -71,9 +71,6 @@ pub enum ImportCommand {
     /// Import nomenclatural acts from a CSV dataset
     NomenclaturalActs(DefaultImportArgs),
 
-    /// Import collections from a CSV dataset
-    Collections(DefaultImportArgs),
-
     /// Import sequences from a CSV dataset
     Sequences(DefaultImportArgs),
 
@@ -102,6 +99,8 @@ pub enum UpdateCommand {
     NomenclaturalActs,
     /// Update publications with the reduced logs
     Publications,
+    /// Update collections with the reduced logs
+    Collections,
 }
 
 #[derive(clap::Subcommand)]
@@ -150,15 +149,6 @@ fn main() -> Result<(), Error> {
                 acts.import()?
             }
 
-            ImportCommand::Collections(args) => {
-                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
-                let collections = Collections {
-                    path: args.path.clone(),
-                    dataset_version_id: dataset_version.id,
-                };
-                collections.import()?
-            }
-
             ImportCommand::Sequences(args) => {
                 let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 let sequences = Sequences {
@@ -199,13 +189,11 @@ fn main() -> Result<(), Error> {
             UpdateCommand::Taxa => {
                 taxa::update()?;
                 taxa::link()?;
-                // Taxa::update()?;
-                // Taxa::link()?;
             }
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
-            // UpdateCommand::TaxonomicActs => TaxonomicActs::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
+            UpdateCommand::Collections => collections::update()?,
         },
 
         Commands::Plazi(cmd) => match cmd {
