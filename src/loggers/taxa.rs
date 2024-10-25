@@ -534,10 +534,14 @@ pub fn update() -> Result<(), Error> {
 
             name_bar.inc(chunk.len() as u64);
 
+            let mut records = chunk.to_vec();
+            records.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));
+            records.dedup_by(|a, b| a.dataset_id.eq(&b.dataset_id) && a.scientific_name.eq(&b.scientific_name));
+
             // postgres always creates a new row version so we cant get
             // an actual figure of the amount of records changed
             diesel::insert_into(taxa)
-                .values(chunk)
+                .values(records)
                 .on_conflict((scientific_name, dataset_id))
                 .do_update()
                 .set((
