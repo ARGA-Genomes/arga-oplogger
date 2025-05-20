@@ -4,6 +4,7 @@ use std::time::Duration;
 use arga_core::models::DatasetVersion;
 use arga_core::schema;
 use chrono::{DateTime, Utc};
+use connection::{Instrumentation, InstrumentationEvent};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::*;
 use tracing::info;
@@ -52,6 +53,19 @@ pub fn get_pool() -> Result<PgPool, Error> {
         .build(manager)?;
     Ok(pool)
 }
+
+
+// a simple logger that prints all events to stdout
+pub fn simple_logger() -> Option<Box<dyn Instrumentation>> {
+    // we need the explicit argument type there due
+    // to bugs in rustc
+    Some(Box::new(|event: InstrumentationEvent<'_>| match event {
+        InstrumentationEvent::StartEstablishConnection { url, .. } => tracing::debug!(url, "Establishing connection"),
+        InstrumentationEvent::StartQuery { query, .. } => tracing::debug!("{query}"),
+        _ => {}
+    }))
+}
+
 
 fn find_dataset_id(dataset_id: &str) -> Result<Uuid, Error> {
     use schema::datasets::dsl::*;
@@ -205,6 +219,40 @@ pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     }
 
     info!(total = map.len(), "Creating publication map finished");
+    Ok(map)
+}
+
+pub fn organism_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::organisms::dsl::*;
+    info!("Creating organism map");
+
+    let mut conn = pool.get()?;
+
+    // let results = organisms.select((id, organism_id)).load::<(Uuid, String)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    // for (uuid, lookup) in results {
+    //     map.insert(lookup, uuid);
+    // }
+
+    info!(total = map.len(), "Creating organism map finished");
+    Ok(map)
+}
+
+pub fn specimen_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::specimens::dsl::*;
+    info!("Creating specimen map");
+
+    let mut conn = pool.get()?;
+
+    // let results = organisms.select((id, specimen_id)).load::<(Uuid, String)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    // for (uuid, lookup) in results {
+    //     map.insert(lookup, uuid);
+    // }
+
+    info!(total = map.len(), "Creating specimen map finished");
     Ok(map)
 }
 

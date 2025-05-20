@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-arga-core = { git = "https://github.com/ARGA-Genomes/arga-backend.git" }
+# arga-core = { git = "https://github.com/ARGA-Genomes/arga-backend.git" }
+arga-core = { path = "../backend/core" }
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 brotli = "6.0.0"
 chrono = { version = "0.4.38", features = ["serde"] }

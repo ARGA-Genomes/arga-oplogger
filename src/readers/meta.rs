@@ -58,6 +58,7 @@ impl From<Meta> for models::Source {
             reuse_pill: None,
             access_pill: None,
             content_type: None,
+            lists_id: None,
         }
     }
 }

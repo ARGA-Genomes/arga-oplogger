@@ -21,7 +21,7 @@ where
 /// A reader that parses a CSV file and decomposes the row into operation logs.
 ///
 /// This uses mmap and rayon to parallelize the read for performance. This means
-/// that the order of rows are not guarantee and a frame of operation logs should
+/// that the order of rows are not guaranteed and a frame of operation logs should
 /// be contained in one row, with each frame considered a separate transaction and
 /// thus a separate 'change' entry.
 pub struct CsvReader<T, R: Read> {

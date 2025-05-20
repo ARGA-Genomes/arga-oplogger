@@ -12,6 +12,7 @@ use crate::{loggers, upsert_meta, ProgressStream};
 #[derive(Debug)]
 pub enum ImportType {
     Unknown,
+    Names,
     Taxa,
     Publications,
     TaxonomicActs,
@@ -26,6 +27,7 @@ impl From<String> for ImportType {
         use ImportType::*;
 
         match value.as_str() {
+            "names.csv.br" => Names,
             "taxa.csv.br" => Taxa,
             "publications.csv.br" => Publications,
             "taxonomic_acts.csv.br" => TaxonomicActs,
@@ -87,13 +89,15 @@ impl Archive {
 
             match import_type {
                 ImportType::Unknown => info!("Unknown type, skipping"),
-                ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
-                ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
-                ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
-                ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
+                // ImportType::Names => loggers::names::import_archive(stream)?,
+                // ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
+                // ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
+                // ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
+                // ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
                 ImportType::Collections => loggers::collections::import_archive(stream, &meta.dataset)?,
-                ImportType::Accessions => todo!(),
+                ImportType::Accessions => {}
                 ImportType::Sequences => todo!(),
+                _ => {}
             }
         }
 
