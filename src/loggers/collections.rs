@@ -7,6 +7,7 @@ use arga_core::{schema, schema_gnl};
 use diesel::*;
 use serde::Deserialize;
 use tracing::{error, info, trace};
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::database::{name_lookup, organism_lookup, specimen_lookup, FrameLoader, StringMap};
 use crate::errors::{Error, LookupError, ReduceError};
@@ -38,12 +39,16 @@ impl OperationLoader for FrameLoader<CollectionEventOperation> {
         use schema::collection_event_logs::dsl::*;
         let mut conn = self.pool.get()?;
 
+        for op in operations {
+            println!("{} - {}", op.operation_id, op.atom.to_string());
+        }
+
         // if there is a conflict based on the operation id then it is a duplicate
         // operation so do nothing with it
         let inserted = diesel::insert_into(collection_event_logs)
             .values(operations)
-            .on_conflict_do_nothing()
-            .execute(&mut conn)?;
+            .execute(&mut conn)
+            .unwrap();
 
         Ok(inserted)
     }
@@ -58,10 +63,10 @@ impl OperationLoader for FrameLoader<CollectionEventOperation> {
 #[derive(Debug, Clone, Deserialize)]
 struct Record {
     entity_id: String,
-    field_collecting_id: String,
     scientific_name: String,
+    specimen_id: String,
     organism_id: String,
-    specimen_id: Option<String>,
+    field_collecting_id: Option<String>,
 
     event_date: Option<chrono::NaiveDate>,
     event_time: Option<chrono::NaiveTime>,
@@ -116,10 +121,10 @@ impl IntoFrame for Record {
         use CollectionEventAtom::*;
 
         // identity
-        frame.push(FieldCollectingId(self.field_collecting_id));
+        frame.push(SpecimenId(self.specimen_id));
         frame.push(ScientificName(self.scientific_name));
         frame.push(OrganismId(self.organism_id));
-        frame_push_opt!(frame, SpecimenId, self.specimen_id);
+        frame_push_opt!(frame, FieldCollectingId, self.field_collecting_id);
 
         // location
         frame_push_opt!(frame, Locality, self.locality);
@@ -206,7 +211,7 @@ pub fn update() -> Result<(), Error> {
             // an actual figure of the amount of records changed
             diesel::insert_into(collection_events)
                 .values(valid_records)
-                .on_conflict(id)
+                .on_conflict(entity_id)
                 .do_update()
                 .set((
                     field_collecting_id.eq(excluded(field_collecting_id)),
@@ -355,18 +360,20 @@ impl Reducer<Lookups> for models::CollectionEvent {
 
         // error out if a mandatory atom is not present. without these fields
         // we cannot construct a reduced record
-        let field_collecting_id = field_collecting_id
-            .ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "FieldCollectingId".to_string()))?;
+        let specimen_id =
+            specimen_id.ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "SpecimenId".to_string()))?;
         let scientific_name = scientific_name
             .ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "ScientificName".to_string()))?;
         let organism_id =
             organism_id.ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "OrganismId".to_string()))?;
 
+        let specimen_entity_id = xxh3_64(specimen_id.as_bytes());
+        let organism_entity_id = xxh3_64(organism_id.as_bytes());
+
 
         let record = models::CollectionEvent {
-            id: uuid::Uuid::new_v4(),
             entity_id: frame.entity_id,
-            field_collecting_id,
+            specimen_id: specimen_entity_id.to_string(),
 
             // everything in our database basically links to a name. we never should get an error
             // here as all names _should_ be imported with every dataset. however that is outside
@@ -379,15 +386,11 @@ impl Reducer<Lookups> for models::CollectionEvent {
 
             // every collection must have an organism. we will stub it out if the dataset doesn't
             // actually include any organism data
-            organism_id: lookups
-                .organisms
-                .get(&organism_id)
-                .ok_or(LookupError::Name(organism_id))?
-                .clone(),
+            organism_id: organism_entity_id.to_string(),
 
             // we can have collected specimens before they get registered into an official repository
-            // so if we don't find a specimen then leave it as null
-            specimen_id: specimen_id.and_then(|id| lookups.specimens.get(&id).copied()),
+            // but it's not universally available so we accept none for it as well
+            field_collecting_id,
 
             event_date,
             event_time,

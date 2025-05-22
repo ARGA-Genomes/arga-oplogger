@@ -29,6 +29,7 @@ macro_rules! frame_push_opt {
     };
 }
 
+
 pub fn new_spinner(message: &str) -> ProgressBar {
     let style = ProgressStyle::with_template(SPINNER_TEMPLATE).expect("Invalid spinner template");
     let spinner = ProgressBar::new_spinner()

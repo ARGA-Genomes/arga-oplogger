@@ -40,14 +40,15 @@ where
     T: LogOperation<A> + Clone,
 {
     let entities = group_operations(existing_ops, new_ops);
-    let mut merged = Vec::new();
+    let mut merged: Vec<T> = Vec::new();
 
     for (key, ops) in entities.into_iter() {
         let mut map = Map::new(key);
         let reduced = map.reduce(&ops);
-        merged.extend(reduced);
+        merged.extend(reduced.into_iter().map(|r| r.to_owned()));
     }
 
+    merged.sort_by(|a, b| a.id().cmp(b.id()));
     merged
 }
 
@@ -86,9 +87,9 @@ where
             let merged = merge_operations(existing_ops, ops);
 
             // because merging uses the last-write-wins map for reduction it still returns
-            // the existing operations. because this is a distinct operation iterator we
+            // the existing operations. since this is a distinct operation iterator we
             // want to remove the existing ops from the merged set
-            let changes = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
+            let changes: Vec<L::Operation> = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
             Ok(changes)
         }
     }
