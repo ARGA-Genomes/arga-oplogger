@@ -81,9 +81,10 @@ fn find_dataset_id(dataset_id: &str) -> Result<Uuid, Error> {
 }
 
 pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str) -> Result<DatasetVersion, Error> {
+    use diesel::upsert::excluded;
     use schema::dataset_versions;
 
-    // info!(dataset_id, version, created_at, "Creating dataset version");
+    info!(dataset_id, version, created_at, "Upserting dataset version");
     let pool = get_pool()?;
     let mut conn = pool.get()?;
 
@@ -95,6 +96,9 @@ pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str)
             created_at: DateTime::parse_from_rfc3339(created_at).unwrap().to_utc(),
             imported_at: Utc::now(),
         })
+        .on_conflict((dataset_versions::dataset_id, dataset_versions::created_at))
+        .do_update()
+        .set(dataset_versions::version.eq(excluded(dataset_versions::version)))
         .returning(DatasetVersion::as_select())
         .get_result(&mut conn)?;
 
