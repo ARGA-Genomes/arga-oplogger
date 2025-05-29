@@ -6,6 +6,7 @@ use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
 use arga_core::models::{
     self,
+    DatasetVersion,
     TaxonomicActAtom,
     TaxonomicActOperation,
     TaxonomicActOperationWithDataset,
@@ -42,12 +43,39 @@ type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
 impl OperationLoader for FrameLoader<TaxonomicActOperation> {
     type Operation = TaxonomicActOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonomicActOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::taxonomic_act_logs::dsl::*;
+
         let mut conn = self.pool.get()?;
 
         let ops = taxonomic_act_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(taxonomic_act_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<TaxonomicActOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::taxonomic_act_logs::dsl::*;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = taxonomic_act_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(taxonomic_act_logs::all_columns())
             .order(operation_id.asc())
             .load::<TaxonomicActOperation>(&mut conn)?;
 
@@ -343,6 +371,7 @@ pub fn reduce_and_update(mut pool: PgPool, offset: i64, limit: i64) -> Result<()
     for (key, ops) in entities.into_iter() {
         let mut map = Map::new(key);
         map.reduce(&ops);
+        let map = Map::new("".to_string());
 
         let mut record = TaxonomicAct::from(map);
         if let Some(op) = ops.first() {

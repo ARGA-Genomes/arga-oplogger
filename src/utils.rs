@@ -36,7 +36,6 @@ pub fn new_spinner(message: &str) -> ProgressBar {
         .with_message(message.to_string())
         .with_style(style);
 
-    spinner.enable_steady_tick(Duration::from_millis(100));
     spinner
 }
 
@@ -60,7 +59,6 @@ pub fn new_spinner_totals(message: &str) -> ProgressBar {
         .with_message(message.to_string())
         .with_style(style);
 
-    spinner.enable_steady_tick(Duration::from_millis(100));
     spinner
 }
 
@@ -74,9 +72,9 @@ pub struct FrameImportBars {
 }
 
 impl FrameImportBars {
-    pub fn new(total_bytes: usize) -> FrameImportBars {
+    pub fn new(total_bytes: usize, message: &str) -> FrameImportBars {
         let bars = MultiProgress::new();
-        let bytes = new_progress_bar_bytes(total_bytes, "Importing");
+        let bytes = new_progress_bar_bytes(total_bytes, message);
         let operations = new_spinner_totals("Total operations");
         let inserted = new_spinner_totals("Operations inserted");
         let frames = new_spinner_totals("Frames read");
@@ -85,7 +83,13 @@ impl FrameImportBars {
         bars.add(inserted.clone());
         bars.add(frames.clone());
 
+        // because we want the render target to be with the multiprogress we
+        // have to set the tick after adding it otherwise it'll corrupt the screen
+        // by rendering before getting the new target
         bytes.enable_steady_tick(Duration::from_millis(200));
+        operations.enable_steady_tick(Duration::from_millis(200));
+        inserted.enable_steady_tick(Duration::from_millis(200));
+        frames.enable_steady_tick(Duration::from_millis(200));
 
         FrameImportBars {
             _bars: bars,

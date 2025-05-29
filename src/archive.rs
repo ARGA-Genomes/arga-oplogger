@@ -17,6 +17,8 @@ pub enum ImportType {
     Publications,
     TaxonomicActs,
     NomenclaturalActs,
+
+    Organisms,
     Collections,
     Accessions,
     Sequences,
@@ -32,6 +34,8 @@ impl From<String> for ImportType {
             "publications.csv.br" => Publications,
             "taxonomic_acts.csv.br" => TaxonomicActs,
             "nomenclatural_acts.csv.br" => NomenclaturalActs,
+
+            "organisms.csv.br" => Organisms,
             "collections.csv.br" => Collections,
             "accessions.csv.br" => Accessions,
             "sequences.csv.br" => Sequences,
@@ -84,19 +88,21 @@ impl Archive {
             let size = entry.header().size()?;
             let import_type = ImportType::from(path.clone());
 
-            info!(path, size, ?import_type);
-            let stream = ProgressStream::new(entry, size as usize);
+            let message = format!("Atomising {path} ({import_type:?})");
+            let stream = ProgressStream::new(entry, size as usize, &message);
 
             match import_type {
-                ImportType::Unknown => info!("Unknown type, skipping"),
+                ImportType::Unknown => {}
                 // ImportType::Names => loggers::names::import_archive(stream)?,
                 // ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
                 // ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
                 // ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
                 // ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
+                ImportType::Organisms => loggers::organisms::import_archive(stream, &meta.dataset)?,
                 ImportType::Collections => loggers::collections::import_archive(stream, &meta.dataset)?,
-                ImportType::Accessions => {}
+                ImportType::Accessions => loggers::accessions::import_archive(stream, &meta.dataset)?,
                 ImportType::Sequences => todo!(),
+
                 _ => {}
             }
         }

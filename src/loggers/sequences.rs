@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use arga_core::crdt::DataFrame;
-use arga_core::models::{SequenceAtom, SequenceOperation};
+use arga_core::models::{DatasetVersion, SequenceAtom, SequenceOperation};
 use arga_core::schema;
 use diesel::*;
 use serde::Deserialize;
@@ -20,12 +20,39 @@ type SequenceFrame = DataFrame<SequenceAtom>;
 impl OperationLoader for FrameLoader<SequenceOperation> {
     type Operation = SequenceOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<SequenceOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::sequence_logs::dsl::*;
+
         let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
 
         let ops = sequence_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(sequence_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<SequenceOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::sequence_logs::dsl::*;
+
+        let mut conn = self.pool.get_timeout(std::time::Duration::from_secs(1))?;
+
+        let ops = sequence_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(sequence_logs::all_columns())
             .order(operation_id.asc())
             .load::<SequenceOperation>(&mut conn)?;
 

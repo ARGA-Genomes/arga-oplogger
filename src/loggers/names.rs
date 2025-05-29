@@ -7,7 +7,6 @@ use tracing::info;
 
 use crate::database::PgPool;
 use crate::errors::Error;
-use crate::readers::meta;
 use crate::utils::new_progress_bar;
 use crate::FrameProgress;
 
@@ -62,7 +61,7 @@ pub fn import_archive<S: Read + FrameProgress>(stream: S) -> Result<(), Error> {
 
     for row in reader.deserialize::<Record>().into_iter() {
         let record = row?;
-        bars.frames.inc(1);
+        // bars.frames.inc(1);
 
         names.push(models::Name {
             id: uuid::Uuid::new_v4(),

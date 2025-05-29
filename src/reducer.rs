@@ -1,7 +1,6 @@
 use arga_core::crdt::lww::Map;
-use arga_core::models::LogOperation;
+use arga_core::models::logs::LogOperation;
 
-use crate::database::PgPool;
 use crate::errors::Error;
 
 

@@ -2,7 +2,15 @@ use std::io::Read;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
-use arga_core::models::{self, TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{
+    self,
+    DatasetVersion,
+    TaxonAtom,
+    TaxonOperation,
+    TaxonOperationWithDataset,
+    TaxonomicRank,
+    TaxonomicStatus,
+};
 use arga_core::schema;
 use diesel::*;
 use indicatif::ParallelProgressIterator;
@@ -37,12 +45,39 @@ type TaxonFrame = DataFrame<TaxonAtom>;
 impl OperationLoader for FrameLoader<TaxonOperation> {
     type Operation = TaxonOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::taxa_logs::dsl::*;
+
         let mut conn = self.pool.get()?;
 
         let ops = taxa_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(taxa_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<TaxonOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::taxa_logs::dsl::*;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = taxa_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(taxa_logs::all_columns())
             .order(operation_id.asc())
             .load::<TaxonOperation>(&mut conn)?;
 

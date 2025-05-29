@@ -2,7 +2,7 @@ use std::io::Read;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
-use arga_core::models::{self, CollectionEventAtom, CollectionEventOperation};
+use arga_core::models::{self, CollectionEventAtom, CollectionEventOperation, DatasetVersion};
 use arga_core::{schema, schema_gnl};
 use diesel::*;
 use serde::Deserialize;
@@ -23,12 +23,39 @@ type CollectionEventFrame = DataFrame<CollectionEventAtom>;
 impl OperationLoader for FrameLoader<CollectionEventOperation> {
     type Operation = CollectionEventOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<CollectionEventOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
         use schema::collection_event_logs::dsl::*;
+        use schema::dataset_versions;
+
         let mut conn = self.pool.get()?;
 
         let ops = collection_event_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(collection_event_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<CollectionEventOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::collection_event_logs::dsl::*;
+        use schema::dataset_versions;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = collection_event_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(collection_event_logs::all_columns())
             .order(operation_id.asc())
             .load::<CollectionEventOperation>(&mut conn)?;
 
@@ -39,12 +66,6 @@ impl OperationLoader for FrameLoader<CollectionEventOperation> {
         use schema::collection_event_logs::dsl::*;
         let mut conn = self.pool.get()?;
 
-        for op in operations {
-            println!("{} - {}", op.operation_id, op.atom.to_string());
-        }
-
-        // if there is a conflict based on the operation id then it is a duplicate
-        // operation so do nothing with it
         let inserted = diesel::insert_into(collection_event_logs)
             .values(operations)
             .execute(&mut conn)
