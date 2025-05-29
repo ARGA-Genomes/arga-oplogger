@@ -14,3 +14,4 @@ jobs:
           REMOTE: 'ssh://codeberg.org/ARGA/arga-oplogger.git'
           GIT_SSH_PRIVATE_KEY: ${{ secrets.GIT_MIRROR_SSH_PRIVATE_KEY }}
           GIT_SSH_KNOWN_HOSTS: ${{ secrets.GIT_MIRROR_SSH_KNOWN_HOSTS }}
+          GIT_SSH_NO_VERIFY_HOST: "true"
