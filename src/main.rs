@@ -108,8 +108,12 @@ pub enum UpdateCommand {
     NomenclaturalActs,
     /// Update publications with the reduced logs
     Publications,
+    /// Update organisms with the reduced logs
+    Organisms,
     /// Update collections with the reduced logs
     Collections,
+    /// Update accessions with the reduced logs
+    Accessions,
 }
 
 #[derive(clap::Subcommand)]
@@ -208,7 +212,9 @@ fn main() -> Result<(), Error> {
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
+            UpdateCommand::Organisms => organisms::update()?,
             UpdateCommand::Collections => collections::update()?,
+            UpdateCommand::Accessions => accessions::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

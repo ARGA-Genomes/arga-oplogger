@@ -727,7 +727,7 @@ struct Lookups {
 impl Reducer<Lookups> for models::TaxonomicAct {
     type Atom = TaxonomicActAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use TaxonomicActAtom::*;
 
         let mut dataset_id = None;
@@ -737,7 +737,7 @@ impl Reducer<Lookups> for models::TaxonomicAct {
         let mut data_created_at = None;
         let mut data_updated_at = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 DatasetId(value) => dataset_id = Some(value),
                 Taxon(value) => taxon = Some(value),
@@ -749,17 +749,16 @@ impl Reducer<Lookups> for models::TaxonomicAct {
             }
         }
 
-        let dataset_id =
-            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = dataset_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "DatasetId".to_string()))?;
         let dataset_id = lookups
             .datasets
             .get(&dataset_id)
             .ok_or(LookupError::Dataset(dataset_id))?
             .clone();
 
-        let taxon = taxon.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "Taxon".to_string()))?;
+        let taxon = taxon.ok_or(ReduceError::MissingAtom(entity_id.clone(), "Taxon".to_string()))?;
         let accepted_taxon =
-            accepted_taxon.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "AcceptedTaxon".to_string()))?;
+            accepted_taxon.ok_or(ReduceError::MissingAtom(entity_id.clone(), "AcceptedTaxon".to_string()))?;
 
         let taxon_key = (dataset_id, taxon.clone());
         let taxon_id = lookups
@@ -777,7 +776,7 @@ impl Reducer<Lookups> for models::TaxonomicAct {
 
         let record = models::TaxonomicAct {
             id: Uuid::new_v4(),
-            entity_id: frame.entity_id,
+            entity_id,
             taxon_id,
             accepted_taxon_id: Some(accepted_taxon_id),
             source_url,

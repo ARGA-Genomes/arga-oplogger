@@ -727,14 +727,14 @@ struct LinkLookups {
 impl Reducer<LinkLookups> for TaxonLink {
     type Atom = TaxonAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &LinkLookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &LinkLookups) -> Result<Self, Error> {
         use TaxonAtom::*;
 
         let mut dataset_id = None;
         let mut parent_taxon = None;
         let mut scientific_name = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 DatasetId(value) => dataset_id = Some(value),
                 ParentTaxon(value) => parent_taxon = Some(value),
@@ -743,8 +743,7 @@ impl Reducer<LinkLookups> for TaxonLink {
             }
         }
 
-        let dataset_id =
-            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = dataset_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "DatasetId".to_string()))?;
         let dataset_id = lookups
             .datasets
             .get(&dataset_id)
@@ -752,7 +751,7 @@ impl Reducer<LinkLookups> for TaxonLink {
             .clone();
 
         let scientific_name =
-            scientific_name.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "ScientificName".to_string()))?;
+            scientific_name.ok_or(ReduceError::MissingAtom(entity_id.clone(), "ScientificName".to_string()))?;
         let name_id = lookups
             .names
             .get(&scientific_name)
@@ -793,7 +792,7 @@ impl Reducer<LinkLookups> for TaxonLink {
 impl Reducer<Lookups> for models::Taxon {
     type Atom = TaxonAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use TaxonAtom::*;
 
         let mut dataset_id = None;
@@ -809,7 +808,7 @@ impl Reducer<Lookups> for models::Taxon {
         let mut references = None;
         let mut last_updated = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 Empty => {}
                 DatasetId(value) => dataset_id = Some(value),
@@ -841,8 +840,7 @@ impl Reducer<Lookups> for models::Taxon {
             }
         }
 
-        let dataset_id =
-            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = dataset_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "DatasetId".to_string()))?;
         let dataset_id = lookups
             .datasets
             .get(&dataset_id)
@@ -850,7 +848,7 @@ impl Reducer<Lookups> for models::Taxon {
 
         let record = models::Taxon {
             id: uuid::Uuid::new_v4(),
-            entity_id: Some(frame.entity_id),
+            entity_id: Some(entity_id),
             dataset_id: dataset_id.clone(),
             parent_id: None,
             status: taxonomic_status.expect("taxonomic status not found"),

@@ -1,15 +1,14 @@
 use std::io::Read;
 
-use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
 use arga_core::models::{self, CollectionEventAtom, CollectionEventOperation, DatasetVersion};
 use arga_core::{schema, schema_gnl};
 use diesel::*;
 use serde::Deserialize;
-use tracing::{error, info, trace};
+use tracing::error;
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::database::{name_lookup, organism_lookup, specimen_lookup, FrameLoader, StringMap};
+use crate::database::{name_lookup, FrameLoader, StringMap};
 use crate::errors::{Error, LookupError, ReduceError};
 use crate::frames::IntoFrame;
 use crate::readers::{meta, OperationLoader};
@@ -199,18 +198,10 @@ pub fn update() -> Result<(), Error> {
 
     let lookups = Lookups {
         names: name_lookup(&mut pool)?,
-        organisms: organism_lookup(&mut pool)?,
-        specimens: specimen_lookup(&mut pool)?,
     };
 
     let pager: FrameLoader<CollectionEventOperation> = FrameLoader::new(pool.clone());
     let bar = new_progress_bar(pager.total()? as usize, "Updating collection events");
-
-    // get the total amount of distinct entities in the log table. this allows
-    // us to split up the reduction into many threads without loading all operations
-    // into memory
-    let total_entities = pager.total()?;
-    info!(total_entities, "Reducing collection events");
 
     let reducer: DatabaseReducer<models::CollectionEvent, _, _> = DatabaseReducer::new(pager, lookups);
     let mut conn = pool.get()?;
@@ -219,14 +210,31 @@ pub fn update() -> Result<(), Error> {
         for chunk in records.chunks(1000) {
             use diesel::upsert::excluded;
             use schema::collection_events::dsl::*;
+            use schema::specimens;
 
+            let mut specimens = Vec::new();
             let mut valid_records = Vec::new();
+
             for record in chunk {
                 match record {
-                    Ok(record) => valid_records.push(record),
+                    Ok(record) => {
+                        valid_records.push(record);
+                        specimens.push(models::Specimen {
+                            entity_id: record.entity_id.clone(),
+                            organism_id: record.organism_id.clone(),
+                            name_id: record.name_id.clone(),
+                        });
+                    }
                     Err(err) => error!(?err),
                 }
             }
+
+            // upsert the specimen stub record in case it's not present
+            diesel::insert_into(specimens::table)
+                .values(specimens)
+                .on_conflict(specimens::entity_id)
+                .do_nothing()
+                .execute(&mut conn)?;
 
             // postgres always creates a new row version so we cant get
             // an actual figure of the amount of records changed
@@ -283,15 +291,13 @@ pub fn update() -> Result<(), Error> {
 
 struct Lookups {
     names: StringMap,
-    organisms: StringMap,
-    specimens: StringMap,
 }
 
 
 impl Reducer<Lookups> for models::CollectionEvent {
     type Atom = CollectionEventAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use CollectionEventAtom::*;
 
         let mut field_collecting_id = None;
@@ -334,7 +340,7 @@ impl Reducer<Lookups> for models::CollectionEvent {
         let mut isolate = None;
         let mut field_notes = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 Empty => {}
                 FieldCollectingId(value) => field_collecting_id = Some(value),
@@ -381,19 +387,17 @@ impl Reducer<Lookups> for models::CollectionEvent {
 
         // error out if a mandatory atom is not present. without these fields
         // we cannot construct a reduced record
-        let specimen_id =
-            specimen_id.ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "SpecimenId".to_string()))?;
-        let scientific_name = scientific_name
-            .ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "ScientificName".to_string()))?;
-        let organism_id =
-            organism_id.ok_or(ReduceError::MissingAtom(frame.entity_id.to_string(), "OrganismId".to_string()))?;
+        let specimen_id = specimen_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "SpecimenId".to_string()))?;
+        let scientific_name =
+            scientific_name.ok_or(ReduceError::MissingAtom(entity_id.clone(), "ScientificName".to_string()))?;
+        let organism_id = organism_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "OrganismId".to_string()))?;
 
         let specimen_entity_id = xxh3_64(specimen_id.as_bytes());
         let organism_entity_id = xxh3_64(organism_id.as_bytes());
 
 
         let record = models::CollectionEvent {
-            entity_id: frame.entity_id,
+            entity_id,
             specimen_id: specimen_entity_id.to_string(),
 
             // everything in our database basically links to a name. we never should get an error
@@ -467,8 +471,6 @@ impl EntityPager for FrameLoader<CollectionEventOperation> {
     }
 
     fn load_entity_operations(&self, page: usize) -> Result<Vec<Self::Operation>, Error> {
-        trace!(page, "loading entity operations");
-
         use schema::collection_event_logs::dsl::*;
         use schema_gnl::collection_event_entities;
 
@@ -479,6 +481,7 @@ impl EntityPager for FrameLoader<CollectionEventOperation> {
 
         let entity_ids = collection_event_entities::table
             .select(collection_event_entities::entity_id)
+            .order_by(collection_event_entities::entity_id)
             .offset(offset)
             .limit(limit)
             .into_boxed();
@@ -488,7 +491,6 @@ impl EntityPager for FrameLoader<CollectionEventOperation> {
             .order_by(operation_id)
             .load::<CollectionEventOperation>(&mut conn)?;
 
-        trace!(total = operations.len(), "operations loaded");
         Ok(operations)
     }
 }

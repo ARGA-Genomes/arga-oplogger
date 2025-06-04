@@ -105,6 +105,7 @@ pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str)
     Ok(dataset_version)
 }
 
+
 /// Refreshes a materialized view.
 /// This can be a costly operation depending on the view being refreshed.
 /// Because we cant use bound parameters on this query we instead use an enum to

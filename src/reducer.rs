@@ -10,7 +10,7 @@ where
 {
     type Atom: Clone + ToString + PartialEq;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &L) -> Result<Self, Error>;
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &L) -> Result<Self, Error>;
 }
 
 
@@ -54,9 +54,10 @@ where
 
         // create an LWW map for each entity and reduce it
         for (key, ops) in entities.into_iter() {
-            let mut map = Map::new(key);
-            map.reduce(&ops);
-            let record = R::reduce(map, &self.lookups);
+            let mut map = Map::new(key.clone());
+            let reduced = map.reduce(&ops).into_iter().map(|op| op.atom().to_owned()).collect();
+
+            let record = R::reduce(key, reduced, &self.lookups);
             records.push(record);
         }
 

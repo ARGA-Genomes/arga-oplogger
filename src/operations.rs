@@ -9,77 +9,6 @@ use crate::errors::Error;
 use crate::readers::OperationLoader;
 
 
-struct CausalOperation<Op, A>
-where
-    A: ToString,
-    Op: LogOperation<A>,
-{
-    index: usize,
-    operation: Op,
-    atom_marker: std::marker::PhantomData<A>,
-}
-
-impl<Op, A> ToString for CausalOperation<Op, A>
-where
-    A: ToString,
-    Op: LogOperation<A>,
-{
-    fn to_string(&self) -> String {
-        format!("{}-{}-{}", self.operation.entity_id(), self.index, self.operation.atom().to_string())
-    }
-}
-
-/// Combine the existing and new operations and group them up by entity id
-pub fn group_causal_operations<T, A>(
-    existing_ops: Vec<T>,
-    new_ops: Vec<T>,
-) -> HashMap<String, Vec<CausalOperation<T, A>>>
-where
-    A: ToString,
-    T: LogOperation<A>,
-{
-    let mut grouped: HashMap<String, Vec<CausalOperation<T, A>>> = HashMap::new();
-
-    let mut existing_counter: HashMap<String, usize> = HashMap::new();
-    for op in existing_ops.into_iter() {
-        let entity_id = op.entity_id().clone();
-
-        let index = *existing_counter
-            .entry(op.atom().to_string())
-            .and_modify(|counter| *counter += 1)
-            .or_insert(0);
-
-        let causal = CausalOperation {
-            index,
-            operation: op,
-            atom_marker: std::marker::PhantomData,
-        };
-
-        grouped.entry(entity_id).or_default().push(causal);
-    }
-
-    let mut new_counter: HashMap<String, usize> = HashMap::new();
-    for op in new_ops.into_iter() {
-        let entity_id = op.entity_id().clone();
-
-        let index = *new_counter
-            .entry(op.atom().to_string())
-            .and_modify(|counter| *counter += 1)
-            .or_insert(0);
-
-        let causal = CausalOperation {
-            index,
-            operation: op,
-            atom_marker: std::marker::PhantomData,
-        };
-
-        grouped.entry(entity_id).or_default().push(causal);
-    }
-
-    grouped
-}
-
-
 /// Combine the existing and new operations and group them up by entity id
 pub fn group_operations<T, A>(existing_ops: Vec<T>, new_ops: Vec<T>) -> HashMap<String, Vec<T>>
 where
@@ -112,34 +41,10 @@ where
     T: LogOperation<A> + Clone + std::fmt::Debug,
 {
     let entities = group_operations(existing_ops, new_ops);
-    // let entities = group_causal_operations(existing_ops, new_ops);
     let mut merged: Vec<T> = Vec::new();
 
     // get all operations for a specific entity. both existing and new operations.
     for (key, ops) in entities.into_iter() {
-        // let mut fields: HashMap<String, Vec<&T>> = HashMap::new();
-
-        // for op in &ops {
-        //     println!("{key}: {} {:?} -- {}", op.operation.id(), op.operation.atom(), op.to_string());
-
-        //     let field_name = op.operation.atom().to_string();
-
-        //     fields
-        //         .entry(field_name)
-        //         .and_modify(|arr| {
-        //             if arr.last().map(|o| o.atom()) != Some(&op.operation.atom()) {
-        //                 arr.push(&op.operation)
-        //             }
-        //         })
-        //         .or_insert(vec![&op.operation]);
-        // }
-
-        // println!("{:#?}", fields);
-
-        // for arr in fields.into_values() {
-        //     merged.extend(arr.into_iter().map(|r| r.to_owned()));
-        // }
-
         let mut map = arga_core::crdt::lww::Map::new(key);
         let reduced = map.reduce(&ops);
         merged.extend(reduced.into_iter().map(|r| r.to_owned()));
