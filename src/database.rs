@@ -189,27 +189,6 @@ pub fn name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     Ok(map)
 }
 
-pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
-    use schema::name_publications::dsl::*;
-    info!("Creating name publication map");
-
-    let mut conn = pool.get()?;
-
-    let results = name_publications
-        .select((id, citation))
-        .load::<(Uuid, Option<String>)>(&mut conn)?;
-
-    let mut map = StringMap::new();
-    for (uuid, lookup) in results {
-        if let Some(lookup) = lookup {
-            map.insert(lookup, uuid);
-        }
-    }
-
-    info!(total = map.len(), "Creating name publication map finished");
-    Ok(map)
-}
-
 pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::publications::dsl::*;
     info!("Creating publication map");
@@ -226,41 +205,6 @@ pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     info!(total = map.len(), "Creating publication map finished");
     Ok(map)
 }
-
-pub fn organism_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
-    use schema::organisms::dsl::*;
-    info!("Creating organism map");
-
-    let mut conn = pool.get()?;
-
-    // let results = organisms.select((id, organism_id)).load::<(Uuid, String)>(&mut conn)?;
-
-    let mut map = StringMap::new();
-    // for (uuid, lookup) in results {
-    //     map.insert(lookup, uuid);
-    // }
-
-    info!(total = map.len(), "Creating organism map finished");
-    Ok(map)
-}
-
-pub fn specimen_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
-    use schema::specimens::dsl::*;
-    info!("Creating specimen map");
-
-    let mut conn = pool.get()?;
-
-    // let results = organisms.select((id, specimen_id)).load::<(Uuid, String)>(&mut conn)?;
-
-    let mut map = StringMap::new();
-    // for (uuid, lookup) in results {
-    //     map.insert(lookup, uuid);
-    // }
-
-    info!(total = map.len(), "Creating specimen map finished");
-    Ok(map)
-}
-
 
 #[derive(Clone)]
 pub struct FrameLoader<T> {

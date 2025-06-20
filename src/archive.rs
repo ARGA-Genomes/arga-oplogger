@@ -93,11 +93,11 @@ impl Archive {
 
             match import_type {
                 ImportType::Unknown => {}
-                // ImportType::Names => loggers::names::import_archive(stream)?,
-                // ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
-                // ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
-                // ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
-                // ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
+                ImportType::Names => loggers::names::import_archive(stream)?,
+                ImportType::Taxa => loggers::taxa::import(stream, &meta.dataset)?,
+                ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
+                ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
+                ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
                 ImportType::Organisms => loggers::organisms::import_archive(stream, &meta.dataset)?,
                 ImportType::Collections => loggers::collections::import_archive(stream, &meta.dataset)?,
                 ImportType::Accessions => loggers::accessions::import_archive(stream, &meta.dataset)?,
