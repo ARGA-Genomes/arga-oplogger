@@ -6,6 +6,7 @@ use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
 use arga_core::models::{
     self,
+    DatasetVersion,
     TaxonomicActAtom,
     TaxonomicActOperation,
     TaxonomicActOperationWithDataset,
@@ -42,12 +43,39 @@ type TaxonomicActFrame = DataFrame<TaxonomicActAtom>;
 impl OperationLoader for FrameLoader<TaxonomicActOperation> {
     type Operation = TaxonomicActOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonomicActOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::taxonomic_act_logs::dsl::*;
+
         let mut conn = self.pool.get()?;
 
         let ops = taxonomic_act_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(taxonomic_act_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<TaxonomicActOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::taxonomic_act_logs::dsl::*;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = taxonomic_act_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(taxonomic_act_logs::all_columns())
             .order(operation_id.asc())
             .load::<TaxonomicActOperation>(&mut conn)?;
 
@@ -343,6 +371,7 @@ pub fn reduce_and_update(mut pool: PgPool, offset: i64, limit: i64) -> Result<()
     for (key, ops) in entities.into_iter() {
         let mut map = Map::new(key);
         map.reduce(&ops);
+        let map = Map::new("".to_string());
 
         let mut record = TaxonomicAct::from(map);
         if let Some(op) = ops.first() {
@@ -698,7 +727,7 @@ struct Lookups {
 impl Reducer<Lookups> for models::TaxonomicAct {
     type Atom = TaxonomicActAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use TaxonomicActAtom::*;
 
         let mut dataset_id = None;
@@ -708,7 +737,7 @@ impl Reducer<Lookups> for models::TaxonomicAct {
         let mut data_created_at = None;
         let mut data_updated_at = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 DatasetId(value) => dataset_id = Some(value),
                 Taxon(value) => taxon = Some(value),
@@ -720,17 +749,16 @@ impl Reducer<Lookups> for models::TaxonomicAct {
             }
         }
 
-        let dataset_id =
-            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = dataset_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "DatasetId".to_string()))?;
         let dataset_id = lookups
             .datasets
             .get(&dataset_id)
             .ok_or(LookupError::Dataset(dataset_id))?
             .clone();
 
-        let taxon = taxon.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "Taxon".to_string()))?;
+        let taxon = taxon.ok_or(ReduceError::MissingAtom(entity_id.clone(), "Taxon".to_string()))?;
         let accepted_taxon =
-            accepted_taxon.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "AcceptedTaxon".to_string()))?;
+            accepted_taxon.ok_or(ReduceError::MissingAtom(entity_id.clone(), "AcceptedTaxon".to_string()))?;
 
         let taxon_key = (dataset_id, taxon.clone());
         let taxon_id = lookups
@@ -748,7 +776,7 @@ impl Reducer<Lookups> for models::TaxonomicAct {
 
         let record = models::TaxonomicAct {
             id: Uuid::new_v4(),
-            entity_id: frame.entity_id,
+            entity_id,
             taxon_id,
             accepted_taxon_id: Some(accepted_taxon_id),
             source_url,

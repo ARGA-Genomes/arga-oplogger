@@ -128,7 +128,6 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 [[package]]
 name = "arga-core"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#44f3c498e17b15e7e0816764cd891df7a74fcb62"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -144,6 +143,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "uuid",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -379,7 +379,6 @@ dependencies = [
 [[package]]
 name = "core-derive"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#44f3c498e17b15e7e0816764cd891df7a74fcb62"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2017,9 +2016,9 @@ dependencies = [
 
 [[package]]
 name = "xxhash-rust"
-version = "0.8.12"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a5cbf750400958819fb6178eaa83bee5cd9c29a26a40cc241df8c70fdd46984"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "zerocopy"

@@ -2,7 +2,15 @@ use std::io::Read;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
-use arga_core::models::{self, TaxonAtom, TaxonOperation, TaxonOperationWithDataset, TaxonomicRank, TaxonomicStatus};
+use arga_core::models::{
+    self,
+    DatasetVersion,
+    TaxonAtom,
+    TaxonOperation,
+    TaxonOperationWithDataset,
+    TaxonomicRank,
+    TaxonomicStatus,
+};
 use arga_core::schema;
 use diesel::*;
 use indicatif::ParallelProgressIterator;
@@ -37,12 +45,39 @@ type TaxonFrame = DataFrame<TaxonAtom>;
 impl OperationLoader for FrameLoader<TaxonOperation> {
     type Operation = TaxonOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<TaxonOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::taxa_logs::dsl::*;
+
         let mut conn = self.pool.get()?;
 
         let ops = taxa_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(taxa_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<TaxonOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::taxa_logs::dsl::*;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = taxa_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(taxa_logs::all_columns())
             .order(operation_id.asc())
             .load::<TaxonOperation>(&mut conn)?;
 
@@ -639,17 +674,17 @@ pub fn link() -> Result<(), Error> {
 
     // we cant do a bulk update without resorting to upserts so instead
     // we use rayon to parallelize to greatly increase the speed
-    links
-        .par_iter()
-        .progress_with(parent_bar)
-        .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
-            use schema::taxa::dsl::*;
+    // links
+    //     .par_iter()
+    //     .progress_with(parent_bar)
+    //     .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
+    //         use schema::taxa::dsl::*;
 
-            diesel::update(taxa.filter(id.eq(taxon_uuid)))
-                .set(parent_id.eq(parent_uuid))
-                .execute(conn)
-                .expect("Failed to update");
-        });
+    //         diesel::update(taxa.filter(id.eq(taxon_uuid)))
+    //             .set(parent_id.eq(parent_uuid))
+    //             .execute(conn)
+    //             .expect("Failed to update");
+    //     });
 
 
     let mut conn = pool.get()?;
@@ -692,14 +727,14 @@ struct LinkLookups {
 impl Reducer<LinkLookups> for TaxonLink {
     type Atom = TaxonAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &LinkLookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &LinkLookups) -> Result<Self, Error> {
         use TaxonAtom::*;
 
         let mut dataset_id = None;
         let mut parent_taxon = None;
         let mut scientific_name = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 DatasetId(value) => dataset_id = Some(value),
                 ParentTaxon(value) => parent_taxon = Some(value),
@@ -708,8 +743,7 @@ impl Reducer<LinkLookups> for TaxonLink {
             }
         }
 
-        let dataset_id =
-            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = dataset_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "DatasetId".to_string()))?;
         let dataset_id = lookups
             .datasets
             .get(&dataset_id)
@@ -717,7 +751,7 @@ impl Reducer<LinkLookups> for TaxonLink {
             .clone();
 
         let scientific_name =
-            scientific_name.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "ScientificName".to_string()))?;
+            scientific_name.ok_or(ReduceError::MissingAtom(entity_id.clone(), "ScientificName".to_string()))?;
         let name_id = lookups
             .names
             .get(&scientific_name)
@@ -758,7 +792,7 @@ impl Reducer<LinkLookups> for TaxonLink {
 impl Reducer<Lookups> for models::Taxon {
     type Atom = TaxonAtom;
 
-    fn reduce(frame: Map<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
+    fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use TaxonAtom::*;
 
         let mut dataset_id = None;
@@ -774,7 +808,7 @@ impl Reducer<Lookups> for models::Taxon {
         let mut references = None;
         let mut last_updated = None;
 
-        for atom in frame.atoms.into_values() {
+        for atom in atoms {
             match atom {
                 Empty => {}
                 DatasetId(value) => dataset_id = Some(value),
@@ -806,8 +840,7 @@ impl Reducer<Lookups> for models::Taxon {
             }
         }
 
-        let dataset_id =
-            dataset_id.ok_or(ReduceError::MissingAtom(frame.entity_id.clone(), "DatasetId".to_string()))?;
+        let dataset_id = dataset_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "DatasetId".to_string()))?;
         let dataset_id = lookups
             .datasets
             .get(&dataset_id)
@@ -815,7 +848,7 @@ impl Reducer<Lookups> for models::Taxon {
 
         let record = models::Taxon {
             id: uuid::Uuid::new_v4(),
-            entity_id: Some(frame.entity_id),
+            entity_id: Some(entity_id),
             dataset_id: dataset_id.clone(),
             parent_id: None,
             status: taxonomic_status.expect("taxonomic status not found"),

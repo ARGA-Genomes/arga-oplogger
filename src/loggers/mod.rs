@@ -1,7 +1,9 @@
+pub mod accessions;
 pub mod collections;
 pub mod datasets;
 pub mod names;
 pub mod nomenclatural_acts;
+pub mod organisms;
 pub mod publications;
 pub mod sequences;
 pub mod sources;
@@ -15,21 +17,19 @@ use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 use arga_core::crdt::{DataFrame, DataFrameOperation};
-use arga_core::models::{self, LogOperation};
-use arga_core::schema;
+use arga_core::models::logs::LogOperation;
+use arga_core::models::DatasetVersion;
+use arga_core::{models, schema};
 use diesel::*;
 use indicatif::ProgressBarIter;
-pub use nomenclatural_acts::NomenclaturalActs;
 use rayon::prelude::*;
-pub use sequences::Sequences;
 use serde::de::DeserializeOwned;
-pub use taxonomic_acts::TaxonomicActs;
 use uuid::Uuid;
 
 use crate::database::{create_dataset_version, get_pool, FrameLoader, PgPool};
 use crate::errors::Error;
 use crate::frames::{FrameReader, Framer, IntoFrame};
-use crate::operations::distinct_changes;
+use crate::operations::{distinct_changes, distinct_dataset_changes};
 use crate::readers::csv::CsvReader;
 use crate::readers::{meta, OperationLoader};
 use crate::utils::FrameImportBars;
@@ -52,8 +52,8 @@ pub struct ProgressStream<S: Read> {
 }
 
 impl<S: Read> ProgressStream<S> {
-    pub fn new(stream: S, total_bytes: usize) -> ProgressStream<S> {
-        let bars = FrameImportBars::new(total_bytes);
+    pub fn new(stream: S, total_bytes: usize, message: &str) -> ProgressStream<S> {
+        let bars = FrameImportBars::new(total_bytes, message);
         let stream = bars.bytes.wrap_read(stream);
         ProgressStream { stream, bars }
     }
@@ -85,15 +85,15 @@ pub fn import_csv_as_logs<T, Op>(path: &PathBuf, dataset_version_id: &Uuid) -> R
 where
     Op: Sync,
     T: DeserializeOwned + IntoFrame,
-    T::Atom: Default + Clone + ToString + PartialEq,
+    T::Atom: Default + Clone + ToString + PartialEq + std::fmt::Debug,
     FrameLoader<Op>: OperationLoader + Clone,
     <FrameLoader<Op> as OperationLoader>::Operation:
-        LogOperation<T::Atom> + From<DataFrameOperation<T::Atom>> + Clone + Sync,
+        LogOperation<T::Atom> + From<DataFrameOperation<T::Atom>> + Clone + Sync + std::fmt::Debug,
 {
     let file = File::open(path)?;
     let size = file.metadata()?.size();
-    let stream = ProgressStream::new(file, size as usize);
-    import_csv_from_stream::<T, Op, _>(stream, dataset_version_id)?;
+    let stream = ProgressStream::new(file, size as usize, "Importing");
+    // import_csv_from_stream::<T, Op, _>(stream, dataset_version_id)?;
     Ok(())
 }
 
@@ -107,14 +107,14 @@ where
     S: Read + FrameProgress,
     Op: Sync,
     T: DeserializeOwned + IntoFrame,
-    T::Atom: Default + Clone + ToString + PartialEq,
+    T::Atom: Default + Clone + ToString + PartialEq + std::fmt::Debug,
     FrameLoader<Op>: OperationLoader + Clone,
     <FrameLoader<Op> as OperationLoader>::Operation:
-        LogOperation<T::Atom> + From<DataFrameOperation<T::Atom>> + Clone + Sync,
+        LogOperation<T::Atom> + From<DataFrameOperation<T::Atom>> + Clone + Sync + std::fmt::Debug,
 {
     let input = brotli::Decompressor::new(stream, 4096);
     let dataset_version = create_dataset_version(&dataset.id, &dataset.version, &dataset.published_at.to_string())?;
-    import_csv_from_stream::<T, Op, _>(input, &dataset_version.id)?;
+    import_csv_from_stream::<T, Op, _>(input, &dataset_version)?;
     Ok(())
 }
 
@@ -128,15 +128,15 @@ where
 /// The Record (<T>) must implement the IntoFrame trait and be deserializable from a CSV file.
 /// The Operation (<Op>) must implement the OperationLoader trait
 /// The Reader (<R>) only needs to implement std::io::Read
-pub fn import_csv_from_stream<T, Op, R>(reader: R, dataset_version_id: &Uuid) -> Result<(), Error>
+pub fn import_csv_from_stream<T, Op, R>(reader: R, dataset_version: &DatasetVersion) -> Result<(), Error>
 where
     R: Read + FrameProgress,
     Op: Sync,
     T: DeserializeOwned + IntoFrame,
-    T::Atom: Default + Clone + ToString + PartialEq,
+    T::Atom: Default + Clone + ToString + PartialEq + std::fmt::Debug,
     FrameLoader<Op>: OperationLoader + Clone,
     <FrameLoader<Op> as OperationLoader>::Operation:
-        LogOperation<T::Atom> + From<DataFrameOperation<T::Atom>> + Clone + Sync,
+        LogOperation<T::Atom> + From<DataFrameOperation<T::Atom>> + Clone + Sync + std::fmt::Debug,
 {
     let bars = reader.bars();
 
@@ -145,7 +145,7 @@ where
     // us to conveniently get chunks of frames from the reader and sets us up for easy parallelization.
     // and the third is the frame loader which allows us to query the database to deduplicate and
     // pull out unique operations, as well as upsert the new operations.
-    let reader = CsvReader::<T, R>::from_reader(reader, *dataset_version_id)?;
+    let reader = CsvReader::<T, R>::from_reader(reader, dataset_version.id.clone())?;
     let framer = Framer::new(reader);
     let loader = FrameLoader::<Op>::new(get_pool()?);
 
@@ -162,8 +162,16 @@ where
         frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
             let total = slice.len();
 
-            // compare the ops with previously imported ops and only return actual changes
-            let changes = distinct_changes(slice.to_vec(), &loader)?;
+            // compare the ops with previously imported ops and only return actual changes for the
+            // specific dataset being imported. this is effectively the changeset between dataset versions
+            let dataset_changes = distinct_dataset_changes(&dataset_version, slice.to_vec(), &loader)?;
+
+            // now compare the dataset changes with the fully reduced entity. this allows us to only
+            // keep changes that occur across datasets instead of keeping full changelog versions of
+            // all datasets that get imported. importantly we compare against a fully reduced entity
+            // *at a specific point in time*, in our case the publication date of the dataset version.
+            // without it we would overwrite data changed by newer dataset versions
+            let changes = distinct_changes(&dataset_version, dataset_changes, &loader)?;
             let inserted = loader.upsert_operations(&changes)?;
 
             bars.inserted.inc(inserted as u64);
@@ -191,12 +199,12 @@ where
 pub fn import_frames_from_stream<Op, R>(reader: R, pool: PgPool) -> Result<(), Error>
 where
     R: FrameReader + FrameProgress,
-    R::Atom: Default + Clone + ToString + PartialEq,
+    R::Atom: Default + Clone + ToString + PartialEq + std::fmt::Debug,
     R: Iterator<Item = Result<DataFrame<R::Atom>, Error>>,
     Op: Sync,
     FrameLoader<Op>: OperationLoader + Clone,
     <FrameLoader<Op> as OperationLoader>::Operation:
-        LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>> + Clone + Sync,
+        LogOperation<R::Atom> + From<DataFrameOperation<R::Atom>> + Clone + Sync + std::fmt::Debug,
 {
     let bars = reader.bars();
 
@@ -218,17 +226,17 @@ where
         // we flatten out all the frames into operations and process them in chunks of 10k.
         // postgres has a parameter limit and by chunking it we can query the database to
         // filter to distinct changes and import it in bulk without triggering any errors.
-        frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
-            let total = slice.len();
+        // frames.operations()?.par_chunks(10_000).try_for_each(|slice| {
+        //     let total = slice.len();
 
-            // compare the ops with previously imported ops and only return actual changes
-            let changes = distinct_changes(slice.to_vec(), &loader)?;
-            let inserted = loader.upsert_operations(&changes)?;
+        //     // compare the ops with previously imported ops and only return actual changes
+        //     let changes = distinct_changes(slice.to_vec(), &loader)?;
+        //     let inserted = loader.upsert_operations(&changes)?;
 
-            bars.inserted.inc(inserted as u64);
-            bars.operations.inc(total as u64);
-            Ok::<(), Error>(())
-        })?;
+        //     bars.inserted.inc(inserted as u64);
+        //     bars.operations.inc(total as u64);
+        //     Ok::<(), Error>(())
+        // })?;
 
         bars.frames.inc(total_frames as u64);
     }

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
-use arga_core::models::{self, NomenclaturalActAtom, NomenclaturalActOperation, NomenclaturalActType};
+use arga_core::models::{self, DatasetVersion, NomenclaturalActAtom, NomenclaturalActOperation, NomenclaturalActType};
 use arga_core::schema;
 use diesel::*;
 use indicatif::ProgressIterator;
@@ -25,12 +25,39 @@ type NomenclaturalActFrame = DataFrame<NomenclaturalActAtom>;
 impl OperationLoader for FrameLoader<NomenclaturalActOperation> {
     type Operation = NomenclaturalActOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<NomenclaturalActOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::nomenclatural_act_logs::dsl::*;
+
         let mut conn = self.pool.get()?;
 
         let ops = nomenclatural_act_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(nomenclatural_act_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<NomenclaturalActOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::nomenclatural_act_logs::dsl::*;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = nomenclatural_act_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(nomenclatural_act_logs::all_columns())
             .order(operation_id.asc())
             .load::<NomenclaturalActOperation>(&mut conn)?;
 

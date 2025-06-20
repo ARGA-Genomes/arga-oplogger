@@ -1,0 +1,25 @@
+#+title:  Reducing logs to a full record at a point in time
+#+author: Goran Sterjov
+#+date:   2025-05-13
+
+* Intro
+Once a record has been atomised and added to an operation log we can reconstruct a record at any point in time. To do this we need to 'reduce' the log for an entity into a record. This is a relatively simple process due to the logs effectively being a time-series database, which is to say that the ID is a timestamp allowing us to query for entity logs up to a specific point in time.
+
+* Merge policies
+Once we have a selection of logs we use a CRDT construct to combine the atoms into a final record. Refer to the [[./design.org][design doc]] for technical details about how atoms are merged. The process by which a CRDT handles conflicts we call a 'merge policy'. Right now ARGA only implements and uses one merge policy, the Last-Write-Wins policy.
+
+** Last-Write-Wins (LWW)
+This policy is perhaps the most intuitive and simplest to understand. Whether it's a network split or a later data import the latest version of an atom will always be used when reconstructing a record.
+
+* Data update process
+ARGA has a number operation log tables to better compartmentalise them and improve overall performance. Most data links to a name on the `names` table to aid in discoverability and simpler querying. For this reason you will almost always be loading up a name lookup map via `name_lookup()`.
+
+If a name doesn't exist in a lookup it should be inserted first and then linked to in the reduced record. It doesn't matter if there are issues with the name or spelling mistakes, we attempt to preserve the data as it comes in.
+Once a reduced record is ready and referencing the appropriate data it should be upserted into the reduced tables. For example, the `taxa_logs` operations will be reduced and upserted into the `taxa` table. As such the `taxa` table will always have the latest version of all taxonomy data. Effectively all reduced tables operate as a cache for the 'latest snapshot' of our operation logs.
+
+In short the process is as follows:
+- load a chunk of entity logs by calling an implementation of the `EntityPager` trait.
+- reduce the logs by calling an implementation of the `Reducer` trait.
+- load relevant lookup tables.
+- insert mandatory records that are missing such as `names`.
+- upsert the reduced record

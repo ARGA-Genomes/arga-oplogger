@@ -72,6 +72,6 @@ pub enum LookupError {
 
 #[derive(thiserror::Error, Debug)]
 pub enum ReduceError {
-    #[error("The entity is incomplete and missing an required atom: entity_id: {0}, atom: {1}")]
+    #[error("The entity is incomplete and missing a required atom: entity_id: {0}, atom: {1}")]
     MissingAtom(String, String),
 }

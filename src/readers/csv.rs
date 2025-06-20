@@ -3,7 +3,7 @@ use std::io::Read;
 use arga_core::crdt::{DataFrame, Version};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
-use xxhash_rust::xxh3::Xxh3;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::errors::Error;
 use crate::frames::{FrameReader, IntoFrame};
@@ -21,7 +21,7 @@ where
 /// A reader that parses a CSV file and decomposes the row into operation logs.
 ///
 /// This uses mmap and rayon to parallelize the read for performance. This means
-/// that the order of rows are not guarantee and a frame of operation logs should
+/// that the order of rows are not guaranteed and a frame of operation logs should
 /// be contained in one row, with each frame considered a separate transaction and
 /// thus a separate 'change' entry.
 pub struct CsvReader<T, R: Read> {
@@ -54,9 +54,7 @@ where
             Some(Err(err)) => Some(Err(err.into())),
             Some(Ok(record)) => {
                 // We hash the entity_id to save on storage in the column
-                let mut hasher = Xxh3::new();
-                hasher.update(record.entity_hashable());
-                let hash = hasher.digest().to_string();
+                let hash = xxh3_64(record.entity_hashable()).to_string();
 
                 let frame = DataFrame::create(hash, self.dataset_version_id, self.last_version);
                 let frame = record.into_frame(frame);

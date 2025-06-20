@@ -12,9 +12,13 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser};
 use database::create_dataset_version;
+use diesel::connection::set_default_instrumentation;
 use errors::Error;
 use loggers::*;
+use nomenclatural_acts::NomenclaturalActs;
 use readers::plazi;
+use sequences::Sequences;
+use taxonomic_acts::TaxonomicActs;
 
 use crate::datasets::Datasets;
 use crate::sources::Sources;
@@ -104,8 +108,12 @@ pub enum UpdateCommand {
     NomenclaturalActs,
     /// Update publications with the reduced logs
     Publications,
+    /// Update organisms with the reduced logs
+    Organisms,
     /// Update collections with the reduced logs
     Collections,
+    /// Update accessions with the reduced logs
+    Accessions,
 }
 
 #[derive(clap::Subcommand)]
@@ -126,6 +134,8 @@ fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();
 
+    set_default_instrumentation(database::simple_logger).expect("Failed to setup database instrumentation");
+
     let cli = Cli::parse();
 
     match &cli.command {
@@ -135,7 +145,7 @@ fn main() -> Result<(), Error> {
         }
         Commands::ImportFile(cmd) => match cmd {
             ImportCommand::Taxa(args) => {
-                let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
+                // let dataset_version = create_dataset_version(&args.dataset_id, &args.version, &args.created_at)?;
                 // let taxa = Taxa {
                 //     path: args.path.clone(),
                 //     dataset_version_id: dataset_version.id,
@@ -202,7 +212,9 @@ fn main() -> Result<(), Error> {
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
+            UpdateCommand::Organisms => organisms::update()?,
             UpdateCommand::Collections => collections::update()?,
+            UpdateCommand::Accessions => accessions::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

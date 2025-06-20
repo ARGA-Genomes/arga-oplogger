@@ -4,6 +4,7 @@ use std::time::Duration;
 use arga_core::models::DatasetVersion;
 use arga_core::schema;
 use chrono::{DateTime, Utc};
+use connection::{Instrumentation, InstrumentationEvent};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::*;
 use tracing::info;
@@ -53,6 +54,19 @@ pub fn get_pool() -> Result<PgPool, Error> {
     Ok(pool)
 }
 
+
+// a simple logger that prints all events to stdout
+pub fn simple_logger() -> Option<Box<dyn Instrumentation>> {
+    // we need the explicit argument type there due
+    // to bugs in rustc
+    Some(Box::new(|event: InstrumentationEvent<'_>| match event {
+        InstrumentationEvent::StartEstablishConnection { url, .. } => tracing::debug!(url, "Establishing connection"),
+        InstrumentationEvent::StartQuery { query, .. } => tracing::debug!("{query}"),
+        _ => {}
+    }))
+}
+
+
 fn find_dataset_id(dataset_id: &str) -> Result<Uuid, Error> {
     use schema::datasets::dsl::*;
 
@@ -67,9 +81,10 @@ fn find_dataset_id(dataset_id: &str) -> Result<Uuid, Error> {
 }
 
 pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str) -> Result<DatasetVersion, Error> {
+    use diesel::upsert::excluded;
     use schema::dataset_versions;
 
-    info!(dataset_id, version, created_at, "Creating dataset version");
+    info!(dataset_id, version, created_at, "Upserting dataset version");
     let pool = get_pool()?;
     let mut conn = pool.get()?;
 
@@ -81,11 +96,15 @@ pub fn create_dataset_version(dataset_id: &str, version: &str, created_at: &str)
             created_at: DateTime::parse_from_rfc3339(created_at).unwrap().to_utc(),
             imported_at: Utc::now(),
         })
+        .on_conflict((dataset_versions::dataset_id, dataset_versions::created_at))
+        .do_update()
+        .set(dataset_versions::version.eq(excluded(dataset_versions::version)))
         .returning(DatasetVersion::as_select())
         .get_result(&mut conn)?;
 
     Ok(dataset_version)
 }
+
 
 /// Refreshes a materialized view.
 /// This can be a costly operation depending on the view being refreshed.
@@ -170,27 +189,6 @@ pub fn name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     Ok(map)
 }
 
-pub fn name_publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
-    use schema::name_publications::dsl::*;
-    info!("Creating name publication map");
-
-    let mut conn = pool.get()?;
-
-    let results = name_publications
-        .select((id, citation))
-        .load::<(Uuid, Option<String>)>(&mut conn)?;
-
-    let mut map = StringMap::new();
-    for (uuid, lookup) in results {
-        if let Some(lookup) = lookup {
-            map.insert(lookup, uuid);
-        }
-    }
-
-    info!(total = map.len(), "Creating name publication map finished");
-    Ok(map)
-}
-
 pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::publications::dsl::*;
     info!("Creating publication map");
@@ -207,7 +205,6 @@ pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     info!(total = map.len(), "Creating publication map finished");
     Ok(map)
 }
-
 
 #[derive(Clone)]
 pub struct FrameLoader<T> {

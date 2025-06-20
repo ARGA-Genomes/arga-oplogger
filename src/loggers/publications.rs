@@ -2,7 +2,7 @@ use std::io::Read;
 
 use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
-use arga_core::models::{self, PublicationAtom, PublicationOperation, PublicationType};
+use arga_core::models::{self, DatasetVersion, PublicationAtom, PublicationOperation, PublicationType};
 use arga_core::schema;
 use chrono::{DateTime, Utc};
 use diesel::*;
@@ -21,12 +21,39 @@ type PublicationFrame = DataFrame<PublicationAtom>;
 impl OperationLoader for FrameLoader<PublicationOperation> {
     type Operation = PublicationOperation;
 
-    fn load_operations(&self, entity_ids: &[&String]) -> Result<Vec<PublicationOperation>, Error> {
+    fn load_operations(&self, version: &DatasetVersion, entity_ids: &[&String]) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
         use schema::publication_logs::dsl::*;
+
         let mut conn = self.pool.get()?;
 
         let ops = publication_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::created_at.le(version.created_at))
             .filter(entity_id.eq_any(entity_ids))
+            .select(publication_logs::all_columns())
+            .order(operation_id.asc())
+            .load::<PublicationOperation>(&mut conn)?;
+
+        Ok(ops)
+    }
+
+    fn load_dataset_operations(
+        &self,
+        version: &DatasetVersion,
+        entity_ids: &[&String],
+    ) -> Result<Vec<Self::Operation>, Error> {
+        use schema::dataset_versions;
+        use schema::publication_logs::dsl::*;
+
+        let mut conn = self.pool.get()?;
+
+        let ops = publication_logs
+            .inner_join(dataset_versions::table.on(dataset_versions::id.eq(dataset_version_id)))
+            .filter(dataset_versions::dataset_id.eq(version.dataset_id))
+            .filter(dataset_versions::created_at.le(version.created_at))
+            .filter(entity_id.eq_any(entity_ids))
+            .select(publication_logs::all_columns())
             .order(operation_id.asc())
             .load::<PublicationOperation>(&mut conn)?;
 

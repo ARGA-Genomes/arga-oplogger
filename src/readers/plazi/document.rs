@@ -111,7 +111,7 @@ where
         let mut reader = Reader::from_reader(reader);
         reader.config_mut().trim_text(true);
 
-        let bars = FrameImportBars::new(0);
+        let bars = FrameImportBars::new(0, "Importing");
         let header = Self::parse_header(&mut reader)?;
 
         Ok(DocumentReader {

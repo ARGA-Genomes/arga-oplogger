@@ -1,17 +1,14 @@
 use std::path::PathBuf;
 
-use arga_core::models::AccessRightsStatus;
-use arga_core::models::DataReuseStatus;
-use arga_core::models::Source;
-use arga_core::models::SourceContentType;
+use arga_core::models::{AccessRightsStatus, DataReuseStatus, Source, SourceContentType};
 use arga_core::schema::sources;
 use diesel::*;
+use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::database::get_pool;
 use crate::errors::Error;
 use crate::utils::{access_pill_status_from_str, content_type_from_str, data_reuse_status_from_str};
-use serde::Deserialize;
-use uuid::Uuid;
 
 pub struct Sources {
     pub path: PathBuf,
@@ -49,6 +46,7 @@ impl From<CSVRecord> for Source {
             reuse_pill: value.reuse_pill,
             access_pill: value.access_pill,
             content_type: value.content_type,
+            lists_id: None,
         }
     }
 }

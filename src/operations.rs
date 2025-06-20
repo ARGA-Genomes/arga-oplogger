@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrameOperation;
-use arga_core::models::LogOperation;
+use arga_core::models::logs::LogOperation;
+use arga_core::models::DatasetVersion;
 use bigdecimal::BigDecimal;
 
 use crate::errors::Error;
@@ -27,6 +27,7 @@ where
     grouped
 }
 
+
 /// Pick out and combine the operations that don't already exist in the existing set of operations.
 ///
 /// This will merge the two lists of operations and use the last-write-wins CRDT map to filter
@@ -36,18 +37,20 @@ where
 /// operation id is different.
 pub fn merge_operations<T, A>(existing_ops: Vec<T>, new_ops: Vec<T>) -> Vec<T>
 where
-    A: ToString + Clone + PartialEq,
-    T: LogOperation<A> + Clone,
+    A: ToString + Clone + PartialEq + std::fmt::Debug,
+    T: LogOperation<A> + Clone + std::fmt::Debug,
 {
     let entities = group_operations(existing_ops, new_ops);
-    let mut merged = Vec::new();
+    let mut merged: Vec<T> = Vec::new();
 
+    // get all operations for a specific entity. both existing and new operations.
     for (key, ops) in entities.into_iter() {
-        let mut map = Map::new(key);
+        let mut map = arga_core::crdt::lww::Map::new(key);
         let reduced = map.reduce(&ops);
-        merged.extend(reduced);
+        merged.extend(reduced.into_iter().map(|r| r.to_owned()));
     }
 
+    merged.sort_by(|a, b| a.id().cmp(b.id()));
     merged
 }
 
@@ -61,11 +64,15 @@ where
 ///
 /// Because this uses the loader its best to find an ideal chunk size for the operations vector
 /// so that it can load the operations in bulk while staying within memory and database bounds.
-pub fn distinct_changes<A, L>(ops: Vec<L::Operation>, loader: &L) -> Result<Vec<L::Operation>, Error>
+pub fn distinct_changes<A, L>(
+    version: &DatasetVersion,
+    ops: Vec<L::Operation>,
+    loader: &L,
+) -> Result<Vec<L::Operation>, Error>
 where
-    A: ToString + Clone + PartialEq,
+    A: ToString + Clone + PartialEq + std::fmt::Debug,
     L: OperationLoader,
-    L::Operation: LogOperation<A> + From<DataFrameOperation<A>> + Clone,
+    L::Operation: LogOperation<A> + From<DataFrameOperation<A>> + Clone + std::fmt::Debug,
 {
     // grab all the entity ids in the chunk because we need to check for existing
     // operations in the database for the operation merge
@@ -73,7 +80,7 @@ where
 
     // load the existing operations by looking for the entity ids present in the frame chunk
     // this allows us to group and compare operations in bulk without using all the memory
-    match loader.load_operations(&entity_ids) {
+    match loader.load_operations(&version, &entity_ids) {
         Err(err) => Err(err),
         Ok(existing_ops) => {
             // use these ids to remove it from the merged operation list as they will end up
@@ -86,9 +93,55 @@ where
             let merged = merge_operations(existing_ops, ops);
 
             // because merging uses the last-write-wins map for reduction it still returns
-            // the existing operations. because this is a distinct operation iterator we
+            // the existing operations. since this is a distinct operation iterator we
             // want to remove the existing ops from the merged set
-            let changes = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
+            let changes: Vec<L::Operation> = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
+            Ok(changes)
+        }
+    }
+}
+
+/// Filters out any no-op operations.
+///
+/// This will query the database for existing operations related to the entity ids found
+/// in the `ops` vector and merge them. The merging process uses the LWW policy to determine
+/// which changes are made. It will also filter out the operations already found in the database
+/// which means this will *only* return operations that actually make a change to the entity.
+///
+/// Because this uses the loader its best to find an ideal chunk size for the operations vector
+/// so that it can load the operations in bulk while staying within memory and database bounds.
+pub fn distinct_dataset_changes<A, L>(
+    version: &DatasetVersion,
+    ops: Vec<L::Operation>,
+    loader: &L,
+) -> Result<Vec<L::Operation>, Error>
+where
+    A: ToString + Clone + PartialEq + std::fmt::Debug,
+    L: OperationLoader,
+    L::Operation: LogOperation<A> + From<DataFrameOperation<A>> + Clone + std::fmt::Debug,
+{
+    // grab all the entity ids in the chunk because we need to check for existing
+    // operations in the database for the operation merge
+    let entity_ids: Vec<&String> = ops.iter().map(|op| op.entity_id()).collect();
+
+    // load the existing operations by looking for the entity ids present in the frame chunk
+    // this allows us to group and compare operations in bulk without using all the memory
+    match loader.load_dataset_operations(version, &entity_ids) {
+        Err(err) => Err(err),
+        Ok(existing_ops) => {
+            // use these ids to remove it from the merged operation list as they will end up
+            // being no ops. we have to clone the id since they're moved in the merge
+            let ids: Vec<BigDecimal> = existing_ops.iter().map(|op| op.id().clone()).collect();
+
+            // merging ensures that we dont have duplicate ops and that we don't have
+            // *useless* ops, which will helpfully eliminate any operation with a newer
+            // timestamp that doesn't change the actual atom
+            let merged = merge_operations(existing_ops, ops);
+
+            // because merging uses the last-write-wins map for reduction it still returns
+            // the existing operations. since this is a distinct operation iterator we
+            // want to remove the existing ops from the merged set
+            let changes: Vec<L::Operation> = merged.into_iter().filter(|op| !ids.contains(op.id())).collect();
             Ok(changes)
         }
     }
