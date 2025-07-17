@@ -353,6 +353,8 @@ pub fn str_to_taxonomic_status(value: &str) -> Result<TaxonomicStatus, ParseErro
 
         "incorrect original spelling" => Ok(Misspelled),
         "misspelling" => Ok(Misspelled),
+        "misspelling - incorrect subsequent spelling" => Ok(Misspelled),
+        "misspelling - incorrect original spelling" => Ok(Misspelled),
 
         "orthographic variant" => Ok(OrthographicVariant),
         "excluded" => Ok(Excluded),

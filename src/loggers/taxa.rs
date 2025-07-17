@@ -674,17 +674,17 @@ pub fn link() -> Result<(), Error> {
 
     // we cant do a bulk update without resorting to upserts so instead
     // we use rayon to parallelize to greatly increase the speed
-    // links
-    //     .par_iter()
-    //     .progress_with(parent_bar)
-    //     .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
-    //         use schema::taxa::dsl::*;
+    links
+        .par_iter()
+        .progress_with(parent_bar)
+        .for_each_init(get_conn, |conn, (taxon_uuid, parent_uuid)| {
+            use schema::taxa::dsl::*;
 
-    //         diesel::update(taxa.filter(id.eq(taxon_uuid)))
-    //             .set(parent_id.eq(parent_uuid))
-    //             .execute(conn)
-    //             .expect("Failed to update");
-    //     });
+            diesel::update(taxa.filter(id.eq(taxon_uuid)))
+                .set(parent_id.eq(parent_uuid))
+                .execute(conn)
+                .expect("Failed to update");
+        });
 
 
     let mut conn = pool.get()?;
