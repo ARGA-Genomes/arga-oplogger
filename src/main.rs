@@ -6,6 +6,7 @@ mod loggers;
 mod operations;
 mod readers;
 mod reducer;
+mod transformer;
 mod utils;
 
 use std::path::PathBuf;
@@ -55,6 +56,9 @@ pub enum Commands {
     /// Specific commands for the plazi treatment bank dataset
     #[command(subcommand)]
     Plazi(PlaziCommand),
+
+    /// Transform source CSV data into an importable archive
+    Transform { path: PathBuf },
 }
 
 #[derive(Args)]
@@ -114,6 +118,8 @@ pub enum UpdateCommand {
     Collections,
     /// Update accessions with the reduced logs
     Accessions,
+    /// Update tissues with the reduced logs
+    Tissues,
 }
 
 #[derive(clap::Subcommand)]
@@ -142,6 +148,9 @@ fn main() -> Result<(), Error> {
         Commands::Import { path } => {
             let archive = archive::Archive::new(path.clone());
             archive.import()?;
+        }
+        Commands::Transform { path } => {
+            transformer::transform(path)?;
         }
         Commands::ImportFile(cmd) => match cmd {
             ImportCommand::Taxa(args) => {
@@ -213,6 +222,7 @@ fn main() -> Result<(), Error> {
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
             UpdateCommand::Organisms => organisms::update()?,
+            UpdateCommand::Tissues => tissues::update()?,
             UpdateCommand::Collections => collections::update()?,
             UpdateCommand::Accessions => accessions::update()?,
         },

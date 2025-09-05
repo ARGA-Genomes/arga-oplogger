@@ -1,0 +1,203 @@
+@base <http://arga.org.au/schemas/model/>.
+
+@prefix : <http://arga.org.au/schemas/rel/>.
+@prefix types: <http://arga.org.au/schemas/types/>.
+@prefix vocab: <http://arga.org.au/schemas/vocab/>.
+@prefix fields: <http://arga.org.au/schemas/fields/>.
+
+
+<entity_id> a types:text;
+            a types:derived.
+
+<sex>            a vocab:sex.
+<genotypic_sex>  a vocab:sex.
+<phenotypic_sex> a vocab:sex.
+
+<life_stage>             a vocab:life_stage.
+<reproductive_condition> a vocab:reproductive_condition.
+<live_state>             a vocab:live_state.
+
+<behavior> a types:text.
+<remarks>  a types:text.
+
+
+<name> :identified_by fields:scientific_name;
+       :has fields:scientific_name;
+       :has fields:scientific_name_authority;
+       :has fields:canonical_name;
+       :has fields:rank.
+
+
+<location> :has fields:locality;
+           :has fields:country;
+           :has fields:country_code;
+           :has fields:state_province;
+           :has fields:county;
+           :has fields:municipality;
+           :has fields:latitude;
+           :has fields:longitude;
+           :has fields:location_generalisation;
+           :has <elevation>;
+           :has <depth>;
+           :has fields:location_source.
+
+
+<elevation> :has fields:accuracy.
+
+<depth> :has fields:accuracy.
+
+
+<curator> :has fields:curator;
+          :has fields:curator_orcid.
+
+
+<identification> :has fields:identified_by;
+                 :has fields:identification_date;
+                 :has fields:remarks.
+
+<collection> :has fields:collected_by;
+             :has fields:collection_date;
+             :has fields:remarks.
+
+
+<organism> :has fields:organism_id;
+           :has fields:scientific_name;
+           :has fields:sex;
+           :has fields:genotypic_sex;
+           :has fields:phenotypic_sex;
+           :has fields:life_stage;
+           :has fields:reproductive_condition;
+           :has fields:behavior;
+           :has fields:live_state;
+           :has fields:remarks;
+           :has <name>;
+           :has <curator>.
+
+
+# references organisms via the entity_id so long as it has
+# enough data to generate the entity_id hash for that model
+<tissue> :has fields:organism_id;
+         :has fields:tissue_id;
+         :has fields:material_sample_id;
+         :has fields:original_catalogue_name;
+         :has fields:current_catalogue_name;
+         :has fields:identification_verified;
+         :has fields:reference_material;
+         :has fields:registered_by;
+         :has fields:registration_date;
+         :has fields:custodian;
+         :has fields:institution;
+         :has fields:institution_code;
+         :has fields:collection;
+         :has fields:collection_code;
+         :has fields:status;
+         :has fields:current_status;
+         :has fields:sampling_protocol;
+         :has fields:tissue_type;
+         :has fields:disposition;
+         :has fields:fixation;
+         :has fields:storage;
+         :has fields:source;
+         :has fields:source_url;
+         :references <curator>;
+         :references <collecting_event>;
+         :references <organism>.
+
+
+<collecting_event> :has fields:organism_id;
+                   :has fields:material_sample_id;
+                   :has fields:field_collecting_id;
+                   :has fields:scientific_name;
+
+                   :has fields:collected_by;
+                   :has fields:collection_date;
+                   :has fields:remarks;
+
+                   :has fields:preparation;
+                   :has fields:habitat;
+                   :has fields:specific_host;
+                   :has fields:individual_count;
+                   :has fields:strain;
+                   :has fields:isolate;
+
+                   :has fields:permit;
+                   :has fields:sampling_protocol;
+                   :has fields:organism_killed;
+                   :has fields:organism_kill_method;
+                   :has fields:field_sample_disposition;
+                   :has fields:field_notes;
+
+                   :has fields:environment_broad_scale;
+                   :has fields:environment_local_scale;
+                   :has fields:environment_medium;
+
+                   :has fields:locality;
+                   :has fields:country;
+                   :has fields:country_code;
+                   :has fields:state_province;
+                   :has fields:county;
+                   :has fields:municipality;
+                   :has fields:latitude;
+                   :has fields:longitude;
+                   :has fields:location_generalisation;
+                   :has fields:location_source;
+                   :has fields:elevation;
+                   :has fields:elevation_accuracy;
+                   :has fields:depth;
+                   :has fields:depth_accuracy;
+
+                   :references <curator>;
+                   :references <organism>.
+
+
+<subsample_event> :has fields:organism_id;
+                  :has fields:material_sample_id;
+                  :has fields:subsample_id;
+
+                  :has fields:sample_type;
+                  :has fields:institution;
+                  :has fields:institution_code;
+                  :has fields:name;
+                  :has fields:custodian;
+                  :has fields:description;
+                  :has fields:notes;
+
+                  :has fields:culture_method;
+                  :has fields:culture_media;
+                  :has fields:weight_or_vol;
+                  :has fields:preservation_method;
+                  :has fields:preservation_temperature;
+                  :has fields:preservation_duration;
+                  :has fields:quality;
+                  :has fields:cell_type;
+                  :has fields:cell_line;
+                  :has fields:clone_name;
+                  :has fields:lab_host;
+                  :has fields:sample_processing;
+                  :has fields:sample_pooling;
+                  :references <curator>;
+                  :references <organism>.
+
+
+<extraction_event> :has fields:subsample_id;
+                   :has fields:extract_id;
+
+                   :has fields:extracted_by;
+                   :has fields:extract_by_orcid;
+                   :has fields:extraction_date;
+                   :has fields:nucleic_acid_type;
+                   :has fields:nucleic_acid_conformation;
+                   :has fields:nucleic_acid_preservation_method;
+                   :has fields:nucleic_acid_concentration;
+                   :has fields:nucleic_acid_quantification;
+
+                   :has fields:concentration_unit;
+                   :has fields:absorbance_260_230_ratio;
+                   :has fields:absorbance_260_280_ratio;
+                   :has fields:cell_lysis_method;
+                   :has fields:material_extracted_by;
+                   :has fields:action_extracted;
+                   :has fields:extraction_method;
+                   :has fields:number_of_extracts_pooled;
+                   :references <curator>;
+                   :references <subsample_event>.

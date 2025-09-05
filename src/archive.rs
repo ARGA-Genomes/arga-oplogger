@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::errors::{Error, ParseError};
 use crate::readers::meta::Meta;
-use crate::{loggers, upsert_meta, ProgressStream};
+use crate::{ProgressStream, loggers, upsert_meta};
 
 
 #[derive(Debug)]
@@ -19,9 +19,12 @@ pub enum ImportType {
     NomenclaturalActs,
 
     Organisms,
+    Tissues,
     Collections,
     Accessions,
     Sequences,
+
+    AdminMedia,
 }
 
 impl From<String> for ImportType {
@@ -36,9 +39,12 @@ impl From<String> for ImportType {
             "nomenclatural_acts.csv.br" => NomenclaturalActs,
 
             "organisms.csv.br" => Organisms,
+            "tissues.csv.br" => Tissues,
             "collections.csv.br" => Collections,
             "accessions.csv.br" => Accessions,
             "sequences.csv.br" => Sequences,
+
+            "admin_media.csv.br" => AdminMedia,
             _ => Unknown,
         }
     }
@@ -99,11 +105,12 @@ impl Archive {
                 ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
                 ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
                 ImportType::Organisms => loggers::organisms::import_archive(stream, &meta.dataset)?,
+                ImportType::Tissues => loggers::tissues::import_archive(stream, &meta.dataset)?,
                 ImportType::Collections => loggers::collections::import_archive(stream, &meta.dataset)?,
                 ImportType::Accessions => loggers::accessions::import_archive(stream, &meta.dataset)?,
                 ImportType::Sequences => todo!(),
 
-                _ => {}
+                ImportType::AdminMedia => loggers::admin_media::import_archive(stream, &meta.dataset)?,
             }
         }
 

@@ -1,0 +1,32 @@
+@base <http://arga.org.au/schemas/names/>.
+
+@prefix :      <http://arga.org.au/schemas/mapping/>.
+@prefix dwc:   <http://rs.tdwg.org/dwc/terms/>.
+@prefix worms: <http://arga.org.au/schemas/maps/worms/>.
+
+
+dwc: {
+  <scientific_name>            :same dwc:scientificName.
+  <scientific_name_authorship> :same dwc:scientificNameAuthorship.
+  <parent_taxon>               :same dwc:parentNameUsage.
+  <taxon_rank>                 :same dwc:taxonRank.
+  <taxonomic_status>           :same dwc:taxonomicStatus.
+  <nomenclatural_code>         :same dwc:nomenclaturalCode.
+  <last_updated>               :same dwc:modified.
+  <taxon_id>                   :same dwc:taxonID.
+}
+
+worms:
+{
+  <canonical_name>                   :same dwc:scientificName.
+  <scientific_name_authorship>       :same dwc:scientificNameAuthorship.
+  <scientific_name>                  :join (dwc:scientificName dwc:scientificNameAuthorship).
+  <taxon_rank>                       :same dwc:taxonRank.
+  <taxonomic_status>                 :same dwc:taxonomicStatus.
+  <nomenclatural_code>               :same dwc:nomenclaturalCode.
+  <last_updated>                     :same dwc:modified.
+  <taxon_id>                         :same dwc:taxonID.
+
+  <accepted_name> :links <scientific_name>;
+                  :via   worms:acceptedNameUsageId.
+}

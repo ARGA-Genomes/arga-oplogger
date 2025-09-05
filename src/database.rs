@@ -189,6 +189,23 @@ pub fn name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     Ok(map)
 }
 
+pub fn canonical_name_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
+    use schema::names::dsl::*;
+    info!("Creating canonical name map");
+
+    let mut conn = pool.get()?;
+
+    let results = names.select((id, canonical_name)).load::<(Uuid, String)>(&mut conn)?;
+
+    let mut map = StringMap::new();
+    for (uuid, lookup) in results {
+        map.insert(lookup, uuid);
+    }
+
+    info!(total = map.len(), "Creating canonical name map finished");
+    Ok(map)
+}
+
 pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
     use schema::publications::dsl::*;
     info!("Creating publication map");

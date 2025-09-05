@@ -9,13 +9,13 @@ use serde::Deserialize;
 use tracing::error;
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::database::{name_lookup, FrameLoader, StringMap};
+use crate::database::{FrameLoader, StringMap, name_lookup};
 use crate::errors::*;
 use crate::frames::IntoFrame;
-use crate::readers::{meta, OperationLoader};
+use crate::readers::{OperationLoader, meta};
 use crate::reducer::{DatabaseReducer, EntityPager, Reducer};
 use crate::utils::new_progress_bar;
-use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
+use crate::{FrameProgress, frame_push_opt, import_compressed_csv_stream};
 
 type AccessionEventFrame = DataFrame<AccessionEventAtom>;
 

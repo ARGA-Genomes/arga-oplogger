@@ -29,6 +29,9 @@ pub enum Error {
 
     #[error(transparent)]
     Reduce(#[from] ReduceError),
+
+    #[error(transparent)]
+    Transform(#[from] TransformError),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -74,4 +77,38 @@ pub enum LookupError {
 pub enum ReduceError {
     #[error("The entity is incomplete and missing a required atom: entity_id: {0}, atom: {1}")]
     MissingAtom(String, String),
+}
+
+
+#[derive(thiserror::Error, Debug)]
+pub enum TransformError {
+    #[error("A mapping for entity_id must exist for all data transforms")]
+    MissingEntityId,
+
+    #[error("Cannot find the header '{0}'")]
+    NoHeader(String),
+
+    #[error("The IRI used in the mapping is invalid")]
+    InvalidMappingIri(String),
+
+    #[error(transparent)]
+    InvalidIri(#[from] iref::InvalidIri<String>),
+
+    #[error(transparent)]
+    Parse(#[from] sophia::iri::InvalidIri),
+
+    #[error(transparent)]
+    Index(#[from] sophia::inmem::index::TermIndexFullError),
+
+    #[error("Inserting quads failed")]
+    Insert(String),
+
+    #[error(transparent)]
+    Sparql(#[from] sophia::sparql::SparqlWrapperError<sophia::inmem::index::TermIndexFullError>),
+
+    #[error("Invalid field triple. Fields must be an IRI with a literal value")]
+    Field {
+        field: Option<crate::transformer::mapped::Value>,
+        value: Option<crate::transformer::mapped::Value>,
+    },
 }
