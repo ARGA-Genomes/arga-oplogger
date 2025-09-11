@@ -361,3 +361,213 @@ impl TryFrom<(Organism, Literal)> for OrganismField {
         Ok(result)
     }
 }
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Subsample {
+    #[iri("fields:tissue_id")]
+    TissueId,
+    #[iri("fields:subsample_id")]
+    SubsampleId,
+    #[iri("fields:sample_type")]
+    SampleType,
+    #[iri("fields:institution")]
+    Institution,
+    #[iri("fields:institution_code")]
+    InstitutionCode,
+    #[iri("fields:name")]
+    Name,
+    #[iri("fields:custodian")]
+    Custodian,
+    #[iri("fields:description")]
+    Description,
+    #[iri("fields:notes")]
+    Notes,
+    #[iri("fields:culture_method")]
+    CultureMethod,
+    #[iri("fields:culture_media")]
+    CultureMedia,
+    #[iri("fields:weight_or_vol")]
+    WeightOrVolume,
+    #[iri("fields:preservation_method")]
+    PreservationMethod,
+    #[iri("fields:preservation_temperature")]
+    PreservationTemperature,
+    #[iri("fields:preservation_duration")]
+    PreservationDuration,
+    #[iri("fields:quality")]
+    Quality,
+    #[iri("fields:cell_type")]
+    CellType,
+    #[iri("fields:cell_line")]
+    CellLine,
+    #[iri("fields:clone_name")]
+    CloneName,
+    #[iri("fields:lab_host")]
+    LabHost,
+    #[iri("fields:sample_processing")]
+    SampleProcessing,
+    #[iri("fields:sample_pooling")]
+    SamplePooling,
+}
+
+
+#[derive(Debug)]
+pub enum SubsampleField {
+    TissueId(String),
+    SubsampleId(String),
+    SampleType(String),
+    Institution(String),
+    InstitutionCode(String),
+    Name(String),
+    Custodian(String),
+    Description(String),
+    Notes(String),
+    CultureMethod(String),
+    CultureMedia(String),
+    WeightOrVolume(String),
+    PreservationMethod(String),
+    PreservationTemperature(String),
+    PreservationDuration(String),
+    Quality(String),
+    CellType(String),
+    CellLine(String),
+    CloneName(String),
+    LabHost(String),
+    SampleProcessing(String),
+    SamplePooling(String),
+}
+
+
+impl TryFrom<(Subsample, Literal)> for SubsampleField {
+    type Error = Error;
+
+    fn try_from(source: (Subsample, Literal)) -> Result<Self, Self::Error> {
+        let (field, lit) = source;
+        let result = match (field, lit) {
+            (Subsample::TissueId, Literal::String(value)) => Self::TissueId(value),
+            (Subsample::SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
+            (Subsample::SampleType, Literal::String(value)) => Self::SampleType(value),
+            (Subsample::Institution, Literal::String(value)) => Self::Institution(value),
+            (Subsample::InstitutionCode, Literal::String(value)) => Self::InstitutionCode(value),
+            (Subsample::Name, Literal::String(value)) => Self::Name(value),
+            (Subsample::Custodian, Literal::String(value)) => Self::Custodian(value),
+            (Subsample::Description, Literal::String(value)) => Self::Description(value),
+            (Subsample::Notes, Literal::String(value)) => Self::Notes(value),
+            (Subsample::CultureMethod, Literal::String(value)) => Self::CultureMethod(value),
+            (Subsample::CultureMedia, Literal::String(value)) => Self::CultureMedia(value),
+            (Subsample::WeightOrVolume, Literal::String(value)) => Self::WeightOrVolume(value),
+            (Subsample::PreservationMethod, Literal::String(value)) => Self::PreservationMethod(value),
+            (Subsample::PreservationTemperature, Literal::String(value)) => Self::PreservationTemperature(value),
+            (Subsample::PreservationDuration, Literal::String(value)) => Self::PreservationDuration(value),
+            (Subsample::Quality, Literal::String(value)) => Self::Quality(value),
+            (Subsample::CellType, Literal::String(value)) => Self::CellType(value),
+            (Subsample::CellLine, Literal::String(value)) => Self::CellLine(value),
+            (Subsample::CloneName, Literal::String(value)) => Self::CloneName(value),
+            (Subsample::LabHost, Literal::String(value)) => Self::LabHost(value),
+            (Subsample::SampleProcessing, Literal::String(value)) => Self::SampleProcessing(value),
+            (Subsample::SamplePooling, Literal::String(value)) => Self::SamplePooling(value),
+        };
+
+        Ok(result)
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Extraction {
+    #[iri("fields:subsample_id")]
+    SubsampleId,
+    #[iri("fields:extract_id")]
+    ExtractId,
+    #[iri("fields:extracted_by")]
+    ExtractedBy,
+    #[iri("fields:extracted_by_orcid")]
+    ExtractedByOrcid,
+    #[iri("fields:extraction_date")]
+    ExtractionDate,
+    #[iri("fields:nucleic_acid_type")]
+    NucleicAcidType,
+    #[iri("fields:nucleic_acid_conformation")]
+    NucleicAcidConformation,
+    #[iri("fields:nucleic_acid_preservation_method")]
+    NucleicAcidPreservationMethod,
+    #[iri("fields:nucleic_acid_concentration")]
+    NucleicAcidConcentration,
+    #[iri("fields:nucleic_acid_quantification")]
+    NucleicAcidQuantification,
+    #[iri("fields:concentration_unit")]
+    ConcentrationUnit,
+    #[iri("fields:absorbance_260_230_ratio")]
+    Absorbance260230Ratio,
+    #[iri("fields:absorbance_260_280_ratio")]
+    Absorbance260280Ratio,
+    #[iri("fields:cell_lysis_method")]
+    CellLysisMethod,
+    #[iri("fields:material_extracted_by")]
+    MaterialExtractedBy,
+    #[iri("fields:action_extracted")]
+    ActionExtracted,
+    #[iri("fields:extraction_method")]
+    ExtractionMethod,
+    #[iri("fields:number_of_extracts_pooled")]
+    NumberOfExtractsPooled,
+}
+
+
+#[derive(Debug)]
+pub enum ExtractionField {
+    SubsampleId(String),
+    ExtractId(String),
+    ExtractedBy(String),
+    ExtractedByOrcid(String),
+    ExtractionDate(String),
+    NucleicAcidType(String),
+    NucleicAcidConformation(String),
+    NucleicAcidPreservationMethod(String),
+    NucleicAcidConcentration(String),
+    NucleicAcidQuantification(String),
+    ConcentrationUnit(String),
+    Absorbance260230Ratio(String),
+    Absorbance260280Ratio(String),
+    CellLysisMethod(String),
+    MaterialExtractedBy(String),
+    ActionExtracted(String),
+    ExtractionMethod(String),
+    NumberOfExtractsPooled(String),
+}
+
+
+impl TryFrom<(Extraction, Literal)> for ExtractionField {
+    type Error = Error;
+
+    fn try_from(source: (Extraction, Literal)) -> Result<Self, Self::Error> {
+        let (field, lit) = source;
+        let result = match (field, lit) {
+            (Extraction::SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
+            (Extraction::ExtractId, Literal::String(value)) => Self::ExtractId(value),
+            (Extraction::ExtractedBy, Literal::String(value)) => Self::ExtractedBy(value),
+            (Extraction::ExtractedByOrcid, Literal::String(value)) => Self::ExtractedByOrcid(value),
+            (Extraction::ExtractionDate, Literal::String(value)) => Self::ExtractionDate(value),
+            (Extraction::NucleicAcidType, Literal::String(value)) => Self::NucleicAcidType(value),
+            (Extraction::NucleicAcidConformation, Literal::String(value)) => Self::NucleicAcidConformation(value),
+            (Extraction::NucleicAcidPreservationMethod, Literal::String(value)) => {
+                Self::NucleicAcidPreservationMethod(value)
+            }
+            (Extraction::NucleicAcidConcentration, Literal::String(value)) => Self::NucleicAcidConcentration(value),
+            (Extraction::NucleicAcidQuantification, Literal::String(value)) => Self::NucleicAcidQuantification(value),
+            (Extraction::ConcentrationUnit, Literal::String(value)) => Self::ConcentrationUnit(value),
+            (Extraction::Absorbance260230Ratio, Literal::String(value)) => Self::Absorbance260230Ratio(value),
+            (Extraction::Absorbance260280Ratio, Literal::String(value)) => Self::Absorbance260280Ratio(value),
+            (Extraction::CellLysisMethod, Literal::String(value)) => Self::CellLysisMethod(value),
+            (Extraction::MaterialExtractedBy, Literal::String(value)) => Self::MaterialExtractedBy(value),
+            (Extraction::ActionExtracted, Literal::String(value)) => Self::ActionExtracted(value),
+            (Extraction::ExtractionMethod, Literal::String(value)) => Self::ExtractionMethod(value),
+            (Extraction::NumberOfExtractsPooled, Literal::String(value)) => Self::NumberOfExtractsPooled(value),
+        };
+
+        Ok(result)
+    }
+}

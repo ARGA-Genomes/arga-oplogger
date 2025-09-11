@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use dataset::Dataset;
 use iref::IriBuf;
 use mapped::{Literal, Value};
-use rdf::{CollectingField, OrganismField, TissueField};
+use rdf::{CollectingField, ExtractionField, OrganismField, SubsampleField, TissueField};
 use sophia::api::prelude::*;
 use sophia::api::term::SimpleTerm;
 use tracing::info;
@@ -38,6 +38,8 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
 
     // load the mapping definitions
     dataset.load_trig_path("rdf/specimens.ttl")?;
+    dataset.load_trig_path("rdf/subsamples.ttl")?;
+    dataset.load_trig_path("rdf/extractions.ttl")?;
     dataset.load_trig_path("rdf/arga.ttl")?;
 
     // transform_test(path)?;
@@ -65,6 +67,11 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
 
     info!("CSV files loaded into TriG dataset");
     export(dataset)
+
+    // let graphs = vec!["http://arga.org.au/schemas/maps/tsi/subsamples"];
+    // let graph = dataset.graph(&graphs);
+    // dump_graph(&graph);
+    // Ok(())
 }
 
 
@@ -176,6 +183,57 @@ pub struct Tissue {
     pub source_url: Option<String>,
 }
 
+#[derive(Debug, Default, serde::Serialize)]
+pub struct Subsample {
+    pub entity_id: String,
+    pub specimen_id: Option<String>,
+    pub subsample_id: Option<String>,
+    pub scientific_name: Option<String>,
+    pub sample_type: Option<String>,
+    pub institution: Option<String>,
+    pub institution_code: Option<String>,
+    pub name: Option<String>,
+    pub custodian: Option<String>,
+    pub description: Option<String>,
+    pub notes: Option<String>,
+    pub culture_method: Option<String>,
+    pub culture_media: Option<String>,
+    pub weight_or_volume: Option<String>,
+    pub preservation_method: Option<String>,
+    pub preservation_temperature: Option<String>,
+    pub preservation_duration: Option<String>,
+    pub quality: Option<String>,
+    pub cell_type: Option<String>,
+    pub cell_line: Option<String>,
+    pub clone_name: Option<String>,
+    pub lab_host: Option<String>,
+    pub sample_processing: Option<String>,
+    pub sample_pooling: Option<String>,
+}
+
+#[derive(Debug, Default, serde::Serialize)]
+pub struct Extraction {
+    pub entity_id: String,
+    pub subsample_id: Option<String>,
+    pub extract_id: Option<String>,
+    pub extracted_by: Option<String>,
+    pub extracted_by_orcid: Option<String>,
+    pub extraction_date: Option<String>,
+    pub nucleic_acid_type: Option<String>,
+    pub nucleic_acid_conformation: Option<String>,
+    pub nucleic_acid_preservation_method: Option<String>,
+    pub nucleic_acid_concentration: Option<String>,
+    pub nucleic_acid_quantification: Option<String>,
+    pub concentration_unit: Option<String>,
+    pub absorbance_260_230_ratio: Option<String>,
+    pub absorbance_260_280_ratio: Option<String>,
+    pub cell_lysis_method: Option<String>,
+    pub material_extracted_by: Option<String>,
+    pub action_extracted: Option<String>,
+    pub extraction_method: Option<String>,
+    pub number_of_extracts_pooled: Option<String>,
+}
+
 
 fn export(dataset: Dataset) -> Result<(), Error> {
     info!("Exporting TriG dataset as importable CSV files");
@@ -185,6 +243,8 @@ fn export(dataset: Dataset) -> Result<(), Error> {
     export_organisms(&mapped)?;
     export_collections(&mapped)?;
     export_tissues(&mapped)?;
+    export_subsamples(&mapped)?;
+    export_extractions(&mapped)?;
 
     Ok(())
 }
@@ -383,6 +443,129 @@ fn export_tissues(mapped: &mapped::Mapped) -> Result<(), Error> {
 }
 
 
+fn export_subsamples(mapped: &mapped::Mapped) -> Result<(), Error> {
+    let mut writer = csv::Writer::from_path("subsamples.csv")?;
+
+    let graphs = vec![
+        "http://arga.org.au/schemas/maps/tsi/",
+        "http://arga.org.au/schemas/maps/tsi/subsamples",
+    ];
+
+    let collecting_graphs = vec![
+        "http://arga.org.au/schemas/maps/tsi/",
+        "http://arga.org.au/schemas/maps/tsi/tissues",
+        "http://arga.org.au/schemas/maps/tsi/collecting",
+    ];
+
+    let ids = get_entity_ids(&graphs, &mapped)?;
+
+    for id in ids {
+        let mut subsample = Subsample {
+            entity_id: id.clone(),
+            ..Default::default()
+        };
+
+        let fields = get_fields(&id, "subsample_event", &graphs, &mapped)?;
+        for (field, value) in fields {
+            let term: rdf::Subsample = field
+                .as_iri()
+                .try_into()
+                .map_err(|_| TransformError::InvalidMappingIri(field.to_string()))?;
+
+            let field: SubsampleField = (term, value).try_into()?;
+            match field {
+                SubsampleField::TissueId(val) => subsample.specimen_id = Some(val),
+                SubsampleField::SubsampleId(val) => subsample.subsample_id = Some(val),
+                SubsampleField::SampleType(val) => subsample.sample_type = Some(val),
+                SubsampleField::Institution(val) => subsample.institution = Some(val),
+                SubsampleField::InstitutionCode(val) => subsample.institution_code = Some(val),
+                SubsampleField::Name(val) => subsample.name = Some(val),
+                SubsampleField::Custodian(val) => subsample.custodian = Some(val),
+                SubsampleField::Description(val) => subsample.description = Some(val),
+                SubsampleField::Notes(val) => subsample.notes = Some(val),
+                SubsampleField::CultureMethod(val) => subsample.culture_method = Some(val),
+                SubsampleField::CultureMedia(val) => subsample.culture_media = Some(val),
+                SubsampleField::WeightOrVolume(val) => subsample.weight_or_volume = Some(val),
+                SubsampleField::PreservationMethod(val) => subsample.preservation_method = Some(val),
+                SubsampleField::PreservationTemperature(val) => subsample.preservation_temperature = Some(val),
+                SubsampleField::PreservationDuration(val) => subsample.preservation_duration = Some(val),
+                SubsampleField::Quality(val) => subsample.quality = Some(val),
+                SubsampleField::CellType(val) => subsample.cell_type = Some(val),
+                SubsampleField::CellLine(val) => subsample.cell_line = Some(val),
+                SubsampleField::CloneName(val) => subsample.clone_name = Some(val),
+                SubsampleField::LabHost(val) => subsample.lab_host = Some(val),
+                SubsampleField::SampleProcessing(val) => subsample.sample_processing = Some(val),
+                SubsampleField::SamplePooling(val) => subsample.sample_pooling = Some(val),
+            }
+        }
+
+        if let Some(specimen_id) = &subsample.specimen_id {
+            let name = get_specimen_name(&specimen_id, &collecting_graphs, &mapped)?;
+            subsample.scientific_name = name;
+        }
+
+        writer.serialize(subsample)?;
+    }
+
+    Ok(())
+}
+
+
+fn export_extractions(mapped: &mapped::Mapped) -> Result<(), Error> {
+    let mut writer = csv::Writer::from_path("extractions.csv")?;
+
+    let graphs = vec![
+        "http://arga.org.au/schemas/maps/tsi/",
+        "http://arga.org.au/schemas/maps/tsi/extractions",
+    ];
+
+    let ids = get_entity_ids(&graphs, &mapped)?;
+
+    for id in ids {
+        let mut extraction = Extraction {
+            entity_id: id.clone(),
+            ..Default::default()
+        };
+
+        let fields = get_fields(&id, "extraction_event", &graphs, &mapped)?;
+        for (field, value) in fields {
+            let term: rdf::Extraction = field
+                .as_iri()
+                .try_into()
+                .map_err(|_| TransformError::InvalidMappingIri(field.to_string()))?;
+
+            let field: ExtractionField = (term, value).try_into()?;
+            match field {
+                ExtractionField::SubsampleId(val) => extraction.subsample_id = Some(val),
+                ExtractionField::ExtractId(val) => extraction.extract_id = Some(val),
+                ExtractionField::ExtractedBy(val) => extraction.extracted_by = Some(val),
+                ExtractionField::ExtractedByOrcid(val) => extraction.extracted_by_orcid = Some(val),
+                ExtractionField::ExtractionDate(val) => extraction.extraction_date = Some(val),
+                ExtractionField::NucleicAcidType(val) => extraction.nucleic_acid_type = Some(val),
+                ExtractionField::NucleicAcidConformation(val) => extraction.nucleic_acid_conformation = Some(val),
+                ExtractionField::NucleicAcidPreservationMethod(val) => {
+                    extraction.nucleic_acid_preservation_method = Some(val)
+                }
+                ExtractionField::NucleicAcidConcentration(val) => extraction.nucleic_acid_conformation = Some(val),
+                ExtractionField::NucleicAcidQuantification(val) => extraction.nucleic_acid_quantification = Some(val),
+                ExtractionField::ConcentrationUnit(val) => extraction.concentration_unit = Some(val),
+                ExtractionField::Absorbance260230Ratio(val) => extraction.absorbance_260_230_ratio = Some(val),
+                ExtractionField::Absorbance260280Ratio(val) => extraction.absorbance_260_280_ratio = Some(val),
+                ExtractionField::CellLysisMethod(val) => extraction.cell_lysis_method = Some(val),
+                ExtractionField::MaterialExtractedBy(val) => extraction.material_extracted_by = Some(val),
+                ExtractionField::ActionExtracted(val) => extraction.action_extracted = Some(val),
+                ExtractionField::ExtractionMethod(val) => extraction.extraction_method = Some(val),
+                ExtractionField::NumberOfExtractsPooled(val) => extraction.number_of_extracts_pooled = Some(val),
+            }
+        }
+
+        writer.serialize(extraction)?;
+    }
+
+    Ok(())
+}
+
+
 fn get_entity_ids(graphs: &Vec<&str>, mapped: &mapped::Mapped) -> Result<Vec<String>, Error> {
     let rows = mapped.query(
         r#"
@@ -450,6 +633,34 @@ SELECT ?fields ?value WHERE {{
     }
 
     Ok(results)
+}
+
+fn get_specimen_name(id: &str, graphs: &Vec<&str>, mapped: &mapped::Mapped) -> Result<Option<String>, TransformError> {
+    let query = format!(
+        r#"
+BASE <http://arga.org.au/schemas/fields/>
+PREFIX : <http://arga.org.au/schemas/mapping/>
+
+SELECT ?value WHERE {{
+  <material_sample_id> :same ?specimen_map.
+  "{id}" ?specimen_map ?specimen_id.
+
+  <scientific_name> :same ?name_map.
+  ?specimen_id ?name_map ?value
+}}
+"#
+    );
+
+    let rows = mapped.query(&query, graphs)?;
+    for row in rows.into_iter() {
+        if let Some(Value::Literal(value)) = row.get(0).unwrap_or(&None) {
+            return Ok(match value {
+                Literal::String(val) => Some(val.clone()),
+            });
+        }
+    }
+
+    Ok(None)
 }
 
 

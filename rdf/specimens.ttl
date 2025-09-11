@@ -1,12 +1,19 @@
 @base <http://arga.org.au/schemas/fields/>.
 
-@prefix :      <http://arga.org.au/schemas/mapping/>.
-@prefix tsi:   <http://arga.org.au/schemas/maps/tsi/>.
+@prefix :           <http://arga.org.au/schemas/mapping/>.
+@prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
+@prefix tsi_model:  <http://arga.org.au/schemas/maps/tsi/model/>.
+
+
+tsi_model:organisms     :models tsi:organisms.
+tsi_model:collecting    :models tsi:collecting.
+tsi_model:tissues       :models tsi:tissues.
+tsi_model:registrations :models tsi:registrations.
 
 
 tsi:organisms
 {
-  <entity_id> :hash tsi:organism:organism_id.
+  <entity_id>   :hash tsi:organism:organism_id.
   <organism_id> :same tsi:organism:organism_id.
 
   <sex>                    :same tsi:organism:sex.
@@ -167,7 +174,7 @@ tsi:registrations {
   <scientific_name>         :same tsi:registrations:current_catalogue_name.
 
   <registered_by>           :same tsi:registrations:registered_by.
-  <registered_by_id>        :same tsi:registrations:registered_by_ID.
+  <registered_by_orcid>     :same tsi:registrations:registered_by_ID.
   <registration_date>       :same tsi:registrations:registration_date.
   <institution>             :same tsi:registrations:institution.
   <institution_code>        :same tsi:registrations:institution_code.
@@ -182,55 +189,4 @@ tsi:registrations {
   <disposition>             :same tsi:registrations:specimen_disposition.
   <fixation>                :same tsi:registrations:specimen_fixation.
   <storage>                 :same tsi:registrations:specimen_storage.
-}
-
-
-tsi:lab_samples {
-  <entity_id>                        :hash tsi:lab_sample:extract_id.
-
-  <organism_id>                      :same tsi:organism:entity_id.
-  <material_sample_id>               :same tsi:tissues:tissue_id.
-  <subsample_id>                     :same tsi:lab_sample:sample_id.
-  <extract_id>                       :same tsi:lab_sample:extract_id.
-
-  <sample_type>                      :same tsi:lab_sample:sample_type.
-  <institution>                      :same tsi:lab_sample:sample_repository.
-  <institution_code>                 :same tsi:lab_sample:sample_repository_code.
-  <name>                             :same tsi:lab_sample:sample_name.
-  <custodian>                        :same tsi:lab_sample:sample_custodian.
-  <description>                      :same tsi:lab_sample:sample_description.
-  <notes>                            :same tsi:lab_sample:sample_notes.
-
-  <culture_method>                   :same tsi:lab_sample:culture_method.
-  <culture_media>                    :same tsi:lab_sample:culture_media.
-  <weight_or_vol>                    :same tsi:lab_sample:sample_weight_or_vol.
-  <preservation_method>              :same tsi:lab_sample:sample_preservation_method.
-  <preservation_temperature>         :same tsi:lab_sample:sample_preservation_temperature.
-  <preservation_duration>            :same tsi:lab_sample:sample_preservation_duration.
-  <quality>                          :same tsi:lab_sample:sample_quality.
-  <cell_type>                        :same tsi:lab_sample:sample_cell_type.
-  <cell_line>                        :same tsi:lab_sample:cell_line.
-  <clone_name>                       :same tsi:lab_sample:clone_name.
-  <lab_host>                         :same tsi:lab_sample:lab_host.
-  <sample_processing>                :same tsi:lab_sample:sample_processing.
-  <sample_pooling>                   :same tsi:lab_sample:sample_pooling.
-
-  <extracted_by>                     :same tsi:lab_sample:extracted_by.
-  <extracted_by_orcid>               :same tsi:lab_sample:extracted_by_ID.
-  <extraction_date>                  :same tsi:lab_sample:extraction_date.
-
-  <nucleic_acid_type>                :same tsi:lab_sample:nucleic_acid_type.
-  <nucleic_acid_conformation>        :same tsi:lab_sample:nucleic_acid_conformation.
-  <nucleic_acid_preservation_method> :same tsi:lab_sample:nucleic_acid_preservation_method.
-  <nucleic_acid_concentration>       :same tsi:lab_sample:nucleic_acid_concentration.
-  <nucleic_acid_quantification>      :same tsi:lab_sample:nucleic_acid_quantification.
-
-  <concentration_unit>               :same tsi:lab_sample:extract_concentration_unit.
-  <absorbance_260_230_ratio>         :same tsi:lab_sample:absorbance_260_230_ratio.
-  <absorbance_260_280_ratio>         :same tsi:lab_sample:absorbance_260_280_ratio.
-  <cell_lysis_method>                :same tsi:lab_sample.cell_lysis_method.
-  <material_extracted_by>            :same tsi:lab_sample.material_extracted_by.
-  <action_extracted>                 :same tsi:lab_sample:action_extracted.
-  <extraction_method>                :same tsi:lab_sample:extraction_method.
-  <number_of_extracts_pooled>        :same tsi:lab_sample:n_extracts_pooled.
 }

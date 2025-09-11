@@ -120,6 +120,8 @@ pub enum UpdateCommand {
     Accessions,
     /// Update tissues with the reduced logs
     Tissues,
+    /// Update subsamples with the reduced logs
+    Subsamples,
 }
 
 #[derive(clap::Subcommand)]
@@ -225,6 +227,7 @@ fn main() -> Result<(), Error> {
             UpdateCommand::Tissues => tissues::update()?,
             UpdateCommand::Collections => collections::update()?,
             UpdateCommand::Accessions => accessions::update()?,
+            UpdateCommand::Subsamples => subsamples::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

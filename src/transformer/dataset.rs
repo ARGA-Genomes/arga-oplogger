@@ -55,7 +55,7 @@ impl Dataset {
         Ok(())
     }
 
-    pub fn load_csv<R: std::io::Read>(&mut self, reader: R, graph: &str) -> Result<(), Error> {
+    pub fn load_csv<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<(), Error> {
         let mut reader = csv::Reader::from_reader(reader);
         let header_row = reader.headers()?.to_owned();
 
@@ -66,40 +66,44 @@ impl Dataset {
             headers.insert(header.to_string(), idx);
         }
 
-        let map = Namespace::new(self.map.clone()).map_err(TransformError::from)?;
-        let graph = map.get(graph).map_err(TransformError::from)?;
+        // a single source can be represented as different data models so we get
+        // all the ways to represent the source and load it up
+        let mut models = Vec::new();
+        for model in self.get_models(source_model)? {
+            let entity_id_map = self.get_entity_id_map(&model.to_string())?;
+            models.push((model, entity_id_map));
+        }
 
         let prefix = Iri::new(self.map.as_str()).map_err(TransformError::from)?;
         let namespace = Namespace::new(prefix).map_err(TransformError::from)?;
-
-        let entity_id_map = self.get_entity_id_map(&graph.to_string())?;
 
         // add all the records into the dataset with the corresponding header
         // as the predicate and the record id as the subject
         for record in reader.records() {
             let record = record?;
 
-            // get the unique record id for this row. we use it to associate
-            // all the other fields with it
-            let record_id = match entity_id_map {
-                Transform::Hash(ref hasher) => hasher.hash(|field| {
-                    let idx = headers.get(field).ok_or(TransformError::NoHeader(field.to_string()))?;
-                    let value = record.get(*idx).ok_or(TransformError::NoHeader(field.to_string()))?;
-                    Ok(value.to_string())
-                })?,
-            };
+            for (model, entity_id_map) in &models {
+                // get the unique record id for this row. we use it to associate
+                // all the other fields with it
+                let record_id = match entity_id_map {
+                    Transform::Hash(ref hasher) => hasher.hash(|field| {
+                        let idx = headers.get(field).ok_or(TransformError::NoHeader(field.to_string()))?;
+                        let value = record.get(*idx).ok_or(TransformError::NoHeader(field.to_string()))?;
+                        Ok(value.to_string())
+                    })?,
+                };
 
+                // (row_id, header, value)
+                // (literal, iri, literal)
+                // eg. (spec123, http://.../scientific_name, My species)
+                for (idx, value) in record.iter().enumerate() {
+                    let header = header_row.get(idx).unwrap();
+                    let header_iri = namespace.get(header).map_err(TransformError::from)?;
 
-            // (row_id, header, value)
-            // (literal, iri, literal)
-            // eg. (spec123, http://.../scientific_name, My species)
-            for (idx, value) in record.iter().enumerate() {
-                let header = header_row.get(idx).unwrap();
-                let header_iri = namespace.get(header).map_err(TransformError::from)?;
-
-                self.source
-                    .insert(record_id.as_str(), header_iri, value, Some(prefix))
-                    .map_err(TransformError::from)?;
+                    self.source
+                        .insert(record_id.as_str(), header_iri, value, Some(model))
+                        .map_err(TransformError::from)?;
+                }
             }
         }
 
@@ -136,6 +140,30 @@ impl Dataset {
         };
 
         Ok(transform)
+    }
+
+    // given a source model, return all the models that it can be transformed into
+    pub fn get_models(&self, source_model: &str) -> Result<Vec<Iri<String>>, TransformError> {
+        let base = Iri::new(super::prefix::MAPPING)?.to_base();
+        let mapping = Namespace::new(base)?;
+        let predicate = mapping.get("models")?;
+
+        let prefix = Iri::new(self.map.as_str())?;
+        let namespace = Namespace::new(prefix)?;
+
+        let source_ns = Namespace::new(namespace.get("model/")?.to_string())?;
+        let source = source_ns.get(source_model)?;
+
+        let mut models = Vec::new();
+        for quad in self.source.quads_matching([source], [predicate], Any, Any) {
+            let (_g, [_s, _p, o]) = quad?;
+            match o {
+                SimpleTerm::Iri(iri) => models.push(Iri::new(iri.to_string())?),
+                _ => {}
+            };
+        }
+
+        Ok(models)
     }
 }
 

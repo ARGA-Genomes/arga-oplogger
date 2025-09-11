@@ -50,6 +50,8 @@
 <curator> :has fields:curator;
           :has fields:curator_orcid.
 
+<agent> :has fields:agent_full_name;
+        :has fields:agent_orcid.
 
 <identification> :has fields:identified_by;
                  :has fields:identification_date;
@@ -150,8 +152,7 @@
                    :references <organism>.
 
 
-<subsample_event> :has fields:organism_id;
-                  :has fields:material_sample_id;
+<subsample_event> :has fields:tissue_id;
                   :has fields:subsample_id;
 
                   :has fields:sample_type;
@@ -183,7 +184,7 @@
                    :has fields:extract_id;
 
                    :has fields:extracted_by;
-                   :has fields:extract_by_orcid;
+                   :has fields:extracted_by_orcid;
                    :has fields:extraction_date;
                    :has fields:nucleic_acid_type;
                    :has fields:nucleic_acid_conformation;
@@ -201,3 +202,12 @@
                    :has fields:number_of_extracts_pooled;
                    :references <curator>;
                    :references <subsample_event>.
+
+
+# tagging fields that can be transposed into other structures
+fields:agent_full_name :same fields:registered_by;
+                       :same fields:extracted_by;
+                       :same fields:material_extracted_by.
+
+fields:agent_orcid :same fields:registered_by_orcid;
+                   :same fields:extracted_by_orcid.

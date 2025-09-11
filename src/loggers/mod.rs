@@ -8,6 +8,7 @@ pub mod organisms;
 pub mod publications;
 pub mod sequences;
 pub mod sources;
+pub mod subsamples;
 pub mod taxa;
 pub mod taxonomic_acts;
 pub mod tissues;

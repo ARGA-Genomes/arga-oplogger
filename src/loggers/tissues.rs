@@ -208,8 +208,8 @@ impl Reducer<Lookups> for models::Tissue {
     fn reduce(entity_id: String, atoms: Vec<Self::Atom>, _lookups: &Lookups) -> Result<Self, Error> {
         use TissueAtom::*;
 
-        let mut specimen_id = None;
         let mut material_sample_id = None;
+        let mut tissue_id = None;
         let mut identification_verified = None;
         let mut reference_material = None;
         let mut custodian = None;
@@ -224,7 +224,7 @@ impl Reducer<Lookups> for models::Tissue {
         for atom in atoms {
             match atom {
                 Empty => {}
-                TissueId(value) => specimen_id = Some(value),
+                TissueId(value) => tissue_id = Some(value),
                 MaterialSampleId(value) => material_sample_id = Some(value),
                 IdentificationVerified(value) => identification_verified = Some(value),
                 ReferenceMaterial(value) => reference_material = Some(value),
@@ -244,11 +244,11 @@ impl Reducer<Lookups> for models::Tissue {
 
         // error out if a mandatory atom is not present. without these fields
         // we cannot construct a reduced record
-        let specimen_id = specimen_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "SpecimenId".to_string()))?;
+        let tissue_id = tissue_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "TissueId".to_string()))?;
         let material_sample_id =
             material_sample_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "MaterialSampleId".to_string()))?;
 
-        let specimen_entity_id = xxh3_64(specimen_id.as_bytes());
+        let specimen_entity_id = xxh3_64(tissue_id.as_bytes());
         let material_sample_entity_id = xxh3_64(material_sample_id.as_bytes());
 
 
@@ -256,6 +256,7 @@ impl Reducer<Lookups> for models::Tissue {
             entity_id,
             specimen_id: specimen_entity_id.to_string(),
             material_sample_id: material_sample_entity_id.to_string(),
+            tissue_id,
 
             identification_verified,
             reference_material,
@@ -390,6 +391,7 @@ pub fn update() -> Result<(), Error> {
                 .set((
                     specimen_id.eq(excluded(specimen_id)),
                     material_sample_id.eq(excluded(material_sample_id)),
+                    tissue_id.eq(excluded(tissue_id)),
                     identification_verified.eq(excluded(identification_verified)),
                     reference_material.eq(excluded(reference_material)),
                     custodian.eq(excluded(custodian)),

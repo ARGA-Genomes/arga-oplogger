@@ -1,0 +1,38 @@
+@base <http://arga.org.au/schemas/fields/>.
+
+@prefix :           <http://arga.org.au/schemas/mapping/>.
+@prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
+@prefix tsi_model:   <http://arga.org.au/schemas/maps/tsi/model/>.
+
+
+# The tsi dataset combines subsamples and extractions into one model
+# called lab_samples. We transpose a subset of that model into a subsample
+tsi_model:lab_samples :models tsi:extractions.
+
+
+tsi:extractions {
+  <entity_id>                        :hash tsi:lab_sample:extract_id.
+
+  <organism_id>                      :same tsi:organism:entity_id.
+  <tissue_id>                        :same tsi:tissues:tissue_id.
+  <subsample_id>                     :same tsi:lab_sample:sample_id.
+
+  <extracted_by>                     :same tsi:lab_sample:extracted_by.
+  <extracted_by_orcid>               :same tsi:lab_sample:extracted_by_ID.
+  <extraction_date>                  :same tsi:lab_sample:extraction_date.
+
+  <nucleic_acid_type>                :same tsi:lab_sample:nucleic_acid_type.
+  <nucleic_acid_conformation>        :same tsi:lab_sample:nucleic_acid_conformation.
+  <nucleic_acid_preservation_method> :same tsi:lab_sample:nucleic_acid_preservation_method.
+  <nucleic_acid_concentration>       :same tsi:lab_sample:nucleic_acid_concentration.
+  <nucleic_acid_quantification>      :same tsi:lab_sample:nucleic_acid_quantification.
+
+  <concentration_unit>               :same tsi:lab_sample:extract_concentration_unit.
+  <absorbance_260_230_ratio>         :same tsi:lab_sample:absorbance_260_230_ratio.
+  <absorbance_260_280_ratio>         :same tsi:lab_sample:absorbance_260_280_ratio.
+  <cell_lysis_method>                :same tsi:lab_sample.cell_lysis_method.
+  <material_extracted_by>            :same tsi:lab_sample.material_extracted_by.
+  <action_extracted>                 :same tsi:lab_sample:action_extracted.
+  <extraction_method>                :same tsi:lab_sample:extraction_method.
+  <number_of_extracts_pooled>        :same tsi:lab_sample:n_extracts_pooled.
+}

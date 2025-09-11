@@ -1,0 +1,41 @@
+@base <http://arga.org.au/schemas/fields/>.
+
+@prefix :           <http://arga.org.au/schemas/mapping/>.
+@prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
+@prefix tsi_model:   <http://arga.org.au/schemas/maps/tsi/model/>.
+
+
+# The tsi dataset combines subsamples and extractions into one model
+# called lab_samples. We transpose a subset of that model into a subsample
+tsi_model:lab_samples :models tsi:subsamples.
+
+
+tsi:subsamples {
+  <entity_id>                        :hash tsi:lab_sample:sample_id.
+
+  <organism_id>                      :same tsi:organism:entity_id.
+  <tissue_id>                        :same tsi:tissues:tissue_id.
+  <subsample_id>                     :same tsi:lab_sample:sample_id.
+
+  <sample_type>                      :same tsi:lab_sample:sample_type.
+  <institution>                      :same tsi:lab_sample:sample_repository.
+  <institution_code>                 :same tsi:lab_sample:sample_repository_code.
+  <name>                             :same tsi:lab_sample:sample_name.
+  <custodian>                        :same tsi:lab_sample:sample_custodian.
+  <description>                      :same tsi:lab_sample:sample_description.
+  <notes>                            :same tsi:lab_sample:sample_notes.
+
+  <culture_method>                   :same tsi:lab_sample:culture_method.
+  <culture_media>                    :same tsi:lab_sample:culture_media.
+  <weight_or_vol>                    :same tsi:lab_sample:sample_weight_or_vol.
+  <preservation_method>              :same tsi:lab_sample:sample_preservation_method.
+  <preservation_temperature>         :same tsi:lab_sample:sample_preservation_temperature.
+  <preservation_duration>            :same tsi:lab_sample:sample_preservation_duration.
+  <quality>                          :same tsi:lab_sample:sample_quality.
+  <cell_type>                        :same tsi:lab_sample:sample_cell_type.
+  <cell_line>                        :same tsi:lab_sample:cell_line.
+  <clone_name>                       :same tsi:lab_sample:clone_name.
+  <lab_host>                         :same tsi:lab_sample:lab_host.
+  <sample_processing>                :same tsi:lab_sample:sample_processing.
+  <sample_pooling>                   :same tsi:lab_sample:sample_pooling.
+}
