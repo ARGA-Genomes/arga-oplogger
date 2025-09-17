@@ -1,7 +1,79 @@
-use iref_enum::IriEnum;
+use std::borrow::Borrow;
 
-use super::mapped::Literal;
-use crate::errors::Error;
+use iref_enum::IriEnum;
+use sophia::api::term::{SimpleTerm, Term};
+
+use crate::errors::TransformError;
+
+
+#[derive(Debug, Clone)]
+pub enum Value {
+    Iri(String),
+    Literal(Literal),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Literal {
+    String(String),
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("mapping" = "http://arga.org.au/schemas/mapping/")]
+pub enum Mapping {
+    /// The subject and object IRIs reflect the same definition
+    /// and can be copied across without transformation.
+    #[iri("mapping:same")]
+    Same,
+
+    /// The subject is the value of the object after it is
+    /// hashed with the xxh3 algorithm to become a content derived hash.
+    #[iri("mapping:hash")]
+    Hash,
+
+    /// The subject is the value of the first IRI in the object list
+    /// that has a value after it is hashed to become a content derived hash.
+    #[iri("mapping:hash_first")]
+    HashFirst,
+}
+
+impl TryFrom<&SimpleTerm<'static>> for Mapping {
+    type Error = TransformError;
+
+    fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
+        let mapping = try_from_term(&value)?;
+        Ok(mapping)
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub enum Map {
+    Same(iref::IriBuf),
+    Hash(iref::IriBuf),
+    HashFirst(Vec<iref::IriBuf>),
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("rdfs" = "http://www.w3.org/1999/02/22-rdf-syntax-ns")]
+pub enum Rdfs {
+    #[iri("rdfs:#first")]
+    First,
+    #[iri("rdfs:#rest")]
+    Rest,
+    #[iri("rdfs:#nil")]
+    Nil,
+}
+
+impl TryFrom<&SimpleTerm<'static>> for Rdfs {
+    type Error = TransformError;
+
+    fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
+        let mapping = try_from_term(&value)?;
+        Ok(mapping)
+    }
+}
 
 
 #[derive(Debug, IriEnum)]
@@ -56,7 +128,7 @@ pub enum Tissue {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TissueField {
     OrganismId(String),
     TissueId(String),
@@ -84,12 +156,9 @@ pub enum TissueField {
 }
 
 
-impl TryFrom<(Tissue, Literal)> for TissueField {
-    type Error = Error;
-
-    fn try_from(source: (Tissue, Literal)) -> Result<Self, Self::Error> {
-        let (field, lit) = source;
-        let result = match (field, lit) {
+impl From<(Tissue, Literal)> for TissueField {
+    fn from(source: (Tissue, Literal)) -> Self {
+        match source {
             (Tissue::OrganismId, Literal::String(value)) => Self::OrganismId(value),
             (Tissue::TissueId, Literal::String(value)) => Self::TissueId(value),
             (Tissue::MaterialSampleId, Literal::String(value)) => Self::MaterialSampleId(value),
@@ -113,9 +182,7 @@ impl TryFrom<(Tissue, Literal)> for TissueField {
             (Tissue::Storage, Literal::String(value)) => Self::Storage(value),
             (Tissue::Source, Literal::String(value)) => Self::Source(value),
             (Tissue::SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
-        };
-
-        Ok(result)
+        }
     }
 }
 
@@ -203,7 +270,7 @@ pub enum Collecting {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CollectingField {
     OrganismId(String),
     MaterialSampleId(String),
@@ -249,12 +316,9 @@ pub enum CollectingField {
 }
 
 
-impl TryFrom<(Collecting, Literal)> for CollectingField {
-    type Error = Error;
-
-    fn try_from(source: (Collecting, Literal)) -> Result<Self, Self::Error> {
-        let (field, lit) = source;
-        let result = match (field, lit) {
+impl From<(Collecting, Literal)> for CollectingField {
+    fn from(source: (Collecting, Literal)) -> Self {
+        match source {
             (Collecting::OrganismId, Literal::String(value)) => Self::OrganismId(value),
             (Collecting::MaterialSampleId, Literal::String(value)) => Self::MaterialSampleId(value),
             (Collecting::FieldCollectingId, Literal::String(value)) => Self::FieldCollectingId(value),
@@ -292,9 +356,7 @@ impl TryFrom<(Collecting, Literal)> for CollectingField {
             (Collecting::ElevationAccuracy, Literal::String(value)) => Self::ElevationAccuracy(value),
             (Collecting::Depth, Literal::String(value)) => Self::Depth(value),
             (Collecting::DepthAccuracy, Literal::String(value)) => Self::DepthAccuracy(value),
-        };
-
-        Ok(result)
+        }
     }
 }
 
@@ -325,7 +387,7 @@ pub enum Organism {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum OrganismField {
     OrganismId(String),
     ScientificName(String),
@@ -340,12 +402,9 @@ pub enum OrganismField {
 }
 
 
-impl TryFrom<(Organism, Literal)> for OrganismField {
-    type Error = Error;
-
-    fn try_from(source: (Organism, Literal)) -> Result<Self, Self::Error> {
-        let (field, lit) = source;
-        let result = match (field, lit) {
+impl From<(Organism, Literal)> for OrganismField {
+    fn from(source: (Organism, Literal)) -> Self {
+        match source {
             (Organism::OrganismId, Literal::String(value)) => Self::OrganismId(value),
             (Organism::ScientificName, Literal::String(value)) => Self::ScientificName(value),
             (Organism::Sex, Literal::String(value)) => Self::Sex(value),
@@ -356,9 +415,7 @@ impl TryFrom<(Organism, Literal)> for OrganismField {
             (Organism::Behavior, Literal::String(value)) => Self::Behavior(value),
             (Organism::LiveState, Literal::String(value)) => Self::LiveState(value),
             (Organism::Remarks, Literal::String(value)) => Self::Remarks(value),
-        };
-
-        Ok(result)
+        }
     }
 }
 
@@ -413,7 +470,7 @@ pub enum Subsample {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SubsampleField {
     TissueId(String),
     SubsampleId(String),
@@ -440,12 +497,9 @@ pub enum SubsampleField {
 }
 
 
-impl TryFrom<(Subsample, Literal)> for SubsampleField {
-    type Error = Error;
-
-    fn try_from(source: (Subsample, Literal)) -> Result<Self, Self::Error> {
-        let (field, lit) = source;
-        let result = match (field, lit) {
+impl From<(Subsample, Literal)> for SubsampleField {
+    fn from(source: (Subsample, Literal)) -> Self {
+        match source {
             (Subsample::TissueId, Literal::String(value)) => Self::TissueId(value),
             (Subsample::SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
             (Subsample::SampleType, Literal::String(value)) => Self::SampleType(value),
@@ -468,9 +522,7 @@ impl TryFrom<(Subsample, Literal)> for SubsampleField {
             (Subsample::LabHost, Literal::String(value)) => Self::LabHost(value),
             (Subsample::SampleProcessing, Literal::String(value)) => Self::SampleProcessing(value),
             (Subsample::SamplePooling, Literal::String(value)) => Self::SamplePooling(value),
-        };
-
-        Ok(result)
+        }
     }
 }
 
@@ -508,16 +560,23 @@ pub enum Extraction {
     CellLysisMethod,
     #[iri("fields:material_extracted_by")]
     MaterialExtractedBy,
+    #[iri("fields:material_extracted_by_orcid")]
+    MaterialExtractedByOrcid,
     #[iri("fields:action_extracted")]
     ActionExtracted,
     #[iri("fields:extraction_method")]
     ExtractionMethod,
     #[iri("fields:number_of_extracts_pooled")]
     NumberOfExtractsPooled,
+
+    #[iri("fields:extracted_by_entity_id")]
+    ExtractedByEntityId,
+    #[iri("fields:material_extracted_by_entity_id")]
+    MaterialExtractedByEntityId,
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExtractionField {
     SubsampleId(String),
     ExtractId(String),
@@ -534,40 +593,112 @@ pub enum ExtractionField {
     Absorbance260280Ratio(String),
     CellLysisMethod(String),
     MaterialExtractedBy(String),
+    MaterialExtractedByOrcid(String),
     ActionExtracted(String),
     ExtractionMethod(String),
     NumberOfExtractsPooled(String),
+
+    ExtractedByEntityId(String),
+    MaterialExtractedByEntityId(String),
 }
 
 
-impl TryFrom<(Extraction, Literal)> for ExtractionField {
-    type Error = Error;
+impl From<(Extraction, Literal)> for ExtractionField {
+    fn from(source: (Extraction, Literal)) -> Self {
+        use Extraction::*;
+        match source {
+            (SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
+            (ExtractId, Literal::String(value)) => Self::ExtractId(value),
+            (ExtractedBy, Literal::String(value)) => Self::ExtractedBy(value),
+            (ExtractedByOrcid, Literal::String(value)) => Self::ExtractedByOrcid(value),
+            (ExtractionDate, Literal::String(value)) => Self::ExtractionDate(value),
+            (NucleicAcidType, Literal::String(value)) => Self::NucleicAcidType(value),
+            (NucleicAcidConformation, Literal::String(value)) => Self::NucleicAcidConformation(value),
+            (NucleicAcidPreservationMethod, Literal::String(value)) => Self::NucleicAcidPreservationMethod(value),
+            (NucleicAcidConcentration, Literal::String(value)) => Self::NucleicAcidConcentration(value),
+            (NucleicAcidQuantification, Literal::String(value)) => Self::NucleicAcidQuantification(value),
+            (ConcentrationUnit, Literal::String(value)) => Self::ConcentrationUnit(value),
+            (Absorbance260230Ratio, Literal::String(value)) => Self::Absorbance260230Ratio(value),
+            (Absorbance260280Ratio, Literal::String(value)) => Self::Absorbance260280Ratio(value),
+            (CellLysisMethod, Literal::String(value)) => Self::CellLysisMethod(value),
+            (MaterialExtractedBy, Literal::String(value)) => Self::MaterialExtractedBy(value),
+            (MaterialExtractedByOrcid, Literal::String(value)) => Self::MaterialExtractedByOrcid(value),
+            (ActionExtracted, Literal::String(value)) => Self::ActionExtracted(value),
+            (ExtractionMethod, Literal::String(value)) => Self::ExtractionMethod(value),
+            (NumberOfExtractsPooled, Literal::String(value)) => Self::NumberOfExtractsPooled(value),
 
-    fn try_from(source: (Extraction, Literal)) -> Result<Self, Self::Error> {
-        let (field, lit) = source;
-        let result = match (field, lit) {
-            (Extraction::SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
-            (Extraction::ExtractId, Literal::String(value)) => Self::ExtractId(value),
-            (Extraction::ExtractedBy, Literal::String(value)) => Self::ExtractedBy(value),
-            (Extraction::ExtractedByOrcid, Literal::String(value)) => Self::ExtractedByOrcid(value),
-            (Extraction::ExtractionDate, Literal::String(value)) => Self::ExtractionDate(value),
-            (Extraction::NucleicAcidType, Literal::String(value)) => Self::NucleicAcidType(value),
-            (Extraction::NucleicAcidConformation, Literal::String(value)) => Self::NucleicAcidConformation(value),
-            (Extraction::NucleicAcidPreservationMethod, Literal::String(value)) => {
-                Self::NucleicAcidPreservationMethod(value)
-            }
-            (Extraction::NucleicAcidConcentration, Literal::String(value)) => Self::NucleicAcidConcentration(value),
-            (Extraction::NucleicAcidQuantification, Literal::String(value)) => Self::NucleicAcidQuantification(value),
-            (Extraction::ConcentrationUnit, Literal::String(value)) => Self::ConcentrationUnit(value),
-            (Extraction::Absorbance260230Ratio, Literal::String(value)) => Self::Absorbance260230Ratio(value),
-            (Extraction::Absorbance260280Ratio, Literal::String(value)) => Self::Absorbance260280Ratio(value),
-            (Extraction::CellLysisMethod, Literal::String(value)) => Self::CellLysisMethod(value),
-            (Extraction::MaterialExtractedBy, Literal::String(value)) => Self::MaterialExtractedBy(value),
-            (Extraction::ActionExtracted, Literal::String(value)) => Self::ActionExtracted(value),
-            (Extraction::ExtractionMethod, Literal::String(value)) => Self::ExtractionMethod(value),
-            (Extraction::NumberOfExtractsPooled, Literal::String(value)) => Self::NumberOfExtractsPooled(value),
-        };
+            (ExtractedByEntityId, Literal::String(value)) => Self::ExtractedByEntityId(value),
+            (MaterialExtractedByEntityId, Literal::String(value)) => Self::MaterialExtractedByEntityId(value),
+        }
+    }
+}
 
-        Ok(result)
+
+pub fn try_from_term<'a, T>(value: &'a SimpleTerm<'static>) -> Result<T, TransformError>
+where
+    T: TryFrom<&'a iref::Iri>,
+{
+    match value {
+        SimpleTerm::Iri(iri_ref) => try_from_iri(iri_ref),
+        pred => Err(TransformError::InvalidMappingIri(format!("{pred:?}"))),
+    }
+}
+
+
+pub trait IntoIriTerm {
+    fn into_iri_term(&self) -> Result<SimpleTerm<'_>, TransformError>;
+}
+
+impl IntoIriTerm for iref::IriBuf {
+    fn into_iri_term(&self) -> Result<SimpleTerm<'_>, TransformError> {
+        let iri = sophia::iri::IriRef::new(self.to_string())?;
+        Ok(iri.into_term())
+    }
+}
+
+impl IntoIriTerm for &iref::Iri {
+    fn into_iri_term(&self) -> Result<SimpleTerm<'_>, TransformError> {
+        let iri = sophia::iri::IriRef::new(self.as_str())?;
+        Ok(iri.into_term())
+    }
+}
+
+
+pub fn try_from_iri<'a, T, R>(value: &'a T) -> Result<R, TransformError>
+where
+    T: ToIri,
+    R: TryFrom<&'a iref::Iri>,
+{
+    let iri = value.to_iri()?;
+    iri.try_into()
+        .map_err(|_| TransformError::InvalidMappingIri(iri.to_string()))
+}
+
+
+pub trait ToIri {
+    fn to_iri(&self) -> Result<&iref::Iri, TransformError>;
+}
+
+impl<T> ToIri for sophia::iri::IriRef<T>
+where
+    T: Borrow<str>,
+{
+    fn to_iri(&self) -> Result<&iref::Iri, TransformError> {
+        iref::Iri::new(self).map_err(|_| TransformError::InvalidMappingIri(self.to_string()))
+    }
+}
+
+
+pub trait ToIriOwned {
+    fn to_iri_owned(&self) -> Result<iref::IriBuf, TransformError>;
+}
+
+impl<T> ToIriOwned for sophia::iri::IriRef<T>
+where
+    T: Borrow<str>,
+{
+    fn to_iri_owned(&self) -> Result<iref::IriBuf, TransformError> {
+        let iri = iref::IriBuf::new(self.to_string())?;
+        Ok(iri)
     }
 }

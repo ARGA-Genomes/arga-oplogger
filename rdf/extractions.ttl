@@ -16,6 +16,7 @@ tsi:extractions {
   <organism_id>                      :same tsi:organism:entity_id.
   <tissue_id>                        :same tsi:tissues:tissue_id.
   <subsample_id>                     :same tsi:lab_sample:sample_id.
+  <extract_id>                       :same tsi:lab_sample:extract_id.
 
   <extracted_by>                     :same tsi:lab_sample:extracted_by.
   <extracted_by_orcid>               :same tsi:lab_sample:extracted_by_ID.
@@ -32,7 +33,13 @@ tsi:extractions {
   <absorbance_260_280_ratio>         :same tsi:lab_sample:absorbance_260_280_ratio.
   <cell_lysis_method>                :same tsi:lab_sample.cell_lysis_method.
   <material_extracted_by>            :same tsi:lab_sample.material_extracted_by.
+  <material_extracted_by_orcid>      :same tsi:lab_sample.material_extracted_by_ID.
   <action_extracted>                 :same tsi:lab_sample:action_extracted.
   <extraction_method>                :same tsi:lab_sample:extraction_method.
   <number_of_extracts_pooled>        :same tsi:lab_sample:n_extracts_pooled.
+
+  # use orcids as the globally unique identifier for agents when available, otherwise fall back
+  # to the full name which should be little more than a name due to it's lack of uniqueness
+  <extracted_by_entity_id>          :hash_first (<extracted_by_orcid> <extracted_by>).
+  <material_extracted_by_entity_id> :hash_first (<material_extracted_by_orcid> <material_extracted_by>).
 }

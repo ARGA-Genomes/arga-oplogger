@@ -20,6 +20,7 @@ use nomenclatural_acts::NomenclaturalActs;
 use readers::plazi;
 use sequences::Sequences;
 use taxonomic_acts::TaxonomicActs;
+use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::datasets::Datasets;
 use crate::sources::Sources;
@@ -112,6 +113,8 @@ pub enum UpdateCommand {
     NomenclaturalActs,
     /// Update publications with the reduced logs
     Publications,
+    /// Update agents with the reduced logs
+    Agents,
     /// Update organisms with the reduced logs
     Organisms,
     /// Update collections with the reduced logs
@@ -122,6 +125,8 @@ pub enum UpdateCommand {
     Tissues,
     /// Update subsamples with the reduced logs
     Subsamples,
+    /// Update extractions with the reduced logs
+    Extractions,
 }
 
 #[derive(clap::Subcommand)]
@@ -140,7 +145,12 @@ pub enum PlaziCommand {
 
 fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
-    tracing_subscriber::fmt::init();
+    // tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_target(false)
+        .with_level(false)
+        .init();
 
     set_default_instrumentation(database::simple_logger).expect("Failed to setup database instrumentation");
 
@@ -223,11 +233,13 @@ fn main() -> Result<(), Error> {
             UpdateCommand::TaxonomicActs => taxonomic_acts::update()?,
             UpdateCommand::NomenclaturalActs => NomenclaturalActs::update()?,
             UpdateCommand::Publications => publications::update()?,
+            UpdateCommand::Agents => agents::update()?,
             UpdateCommand::Organisms => organisms::update()?,
             UpdateCommand::Tissues => tissues::update()?,
             UpdateCommand::Collections => collections::update()?,
             UpdateCommand::Accessions => accessions::update()?,
             UpdateCommand::Subsamples => subsamples::update()?,
+            UpdateCommand::Extractions => extractions::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

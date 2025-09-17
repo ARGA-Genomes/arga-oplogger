@@ -1,7 +1,9 @@
 pub mod accessions;
 pub mod admin_media;
+pub mod agents;
 pub mod collections;
 pub mod datasets;
+pub mod extractions;
 pub mod names;
 pub mod nomenclatural_acts;
 pub mod organisms;

@@ -8,25 +8,25 @@ use sophia::api::ns::Namespace;
 use sophia::api::prelude::*;
 use sophia::api::term::matcher::GraphNameMatcher;
 use sophia::api::term::{GraphName, SimpleTerm};
-use sophia::inmem::dataset::LightDataset;
+use sophia::inmem::dataset::FastDataset;
 use sophia::turtle::parser::trig;
 use tracing::info;
 
 use crate::errors::{Error, TransformError};
 
 
-pub type PartialGraph<'a> = PartialUnionGraph<&'a LightDataset, GraphIri<'a>>;
+pub type PartialGraph<'a> = PartialUnionGraph<&'a FastDataset, GraphIri<'a>>;
 
 
 pub struct Dataset {
-    source: LightDataset,
+    source: FastDataset,
     map: String,
 }
 
 
 impl Dataset {
     pub fn new(map_iri: &str) -> Dataset {
-        let source = LightDataset::new();
+        let source = FastDataset::new();
 
         Dataset {
             source,

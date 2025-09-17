@@ -17,12 +17,14 @@ pub enum ImportType {
     Publications,
     TaxonomicActs,
     NomenclaturalActs,
+    Agents,
 
     Organisms,
     Tissues,
     Collections,
     Accessions,
     Subsamples,
+    Extractions,
     Sequences,
 
     AdminMedia,
@@ -38,12 +40,14 @@ impl From<String> for ImportType {
             "publications.csv.br" => Publications,
             "taxonomic_acts.csv.br" => TaxonomicActs,
             "nomenclatural_acts.csv.br" => NomenclaturalActs,
+            "agents.csv.br" => Agents,
 
             "organisms.csv.br" => Organisms,
             "tissues.csv.br" => Tissues,
             "collections.csv.br" => Collections,
             "accessions.csv.br" => Accessions,
             "subsamples.csv.br" => Subsamples,
+            "extractions.csv.br" => Extractions,
             "sequences.csv.br" => Sequences,
 
             "admin_media.csv.br" => AdminMedia,
@@ -106,11 +110,13 @@ impl Archive {
                 ImportType::Publications => loggers::publications::import_archive(stream, &meta.dataset)?,
                 ImportType::TaxonomicActs => loggers::taxonomic_acts::import(stream, &meta.dataset)?,
                 ImportType::NomenclaturalActs => loggers::nomenclatural_acts::import_archive(stream, &meta.dataset)?,
+                ImportType::Agents => loggers::agents::import_archive(stream, &meta.dataset)?,
                 ImportType::Organisms => loggers::organisms::import_archive(stream, &meta.dataset)?,
                 ImportType::Tissues => loggers::tissues::import_archive(stream, &meta.dataset)?,
                 ImportType::Collections => loggers::collections::import_archive(stream, &meta.dataset)?,
                 ImportType::Accessions => loggers::accessions::import_archive(stream, &meta.dataset)?,
                 ImportType::Subsamples => loggers::subsamples::import_archive(stream, &meta.dataset)?,
+                ImportType::Extractions => loggers::extractions::import_archive(stream, &meta.dataset)?,
                 ImportType::Sequences => todo!(),
 
                 ImportType::AdminMedia => loggers::admin_media::import_archive(stream, &meta.dataset)?,

@@ -185,6 +185,7 @@
 
                    :has fields:extracted_by;
                    :has fields:extracted_by_orcid;
+                   :has fields:extracted_by_entity_id;
                    :has fields:extraction_date;
                    :has fields:nucleic_acid_type;
                    :has fields:nucleic_acid_conformation;
@@ -197,12 +198,22 @@
                    :has fields:absorbance_260_280_ratio;
                    :has fields:cell_lysis_method;
                    :has fields:material_extracted_by;
+                   :has fields:material_extracted_by_entity_id;
                    :has fields:action_extracted;
                    :has fields:extraction_method;
                    :has fields:number_of_extracts_pooled;
                    :references <curator>;
                    :references <subsample_event>.
 
+
+<extraction_agent> a types:agent;
+                   :has fields:extracted_by;
+                   :has fields:extracted_by_orcid;
+                   :has fields:extracted_by_entity_id.
+
+<material_extraction_agent> a types:agent;
+                            :has fields:material_extracted_by;
+                            :has fields:material_extracted_by_entity_id.
 
 # tagging fields that can be transposed into other structures
 fields:agent_full_name :same fields:registered_by;
@@ -211,3 +222,6 @@ fields:agent_full_name :same fields:registered_by;
 
 fields:agent_orcid :same fields:registered_by_orcid;
                    :same fields:extracted_by_orcid.
+
+fields:agent_entity_id :same fields:extracted_by_entity_id;
+                       :same fields:material_extracted_by_entity_id.
