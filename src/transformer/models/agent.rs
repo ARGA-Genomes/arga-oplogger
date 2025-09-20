@@ -81,10 +81,7 @@ pub fn get_material_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, T
     for (entity_id, fields) in data {
         let Literal::String(entity_id) = entity_id;
 
-        let mut agent = Agent {
-            entity_id,
-            ..Default::default()
-        };
+        let mut agent = Agent::default();
 
         for field in fields {
             match field {

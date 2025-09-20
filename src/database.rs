@@ -212,7 +212,10 @@ pub fn publication_lookup(pool: &mut PgPool) -> Result<StringMap, Error> {
 
     let mut conn = pool.get()?;
 
-    let results = publications.select((id, title)).load::<(Uuid, String)>(&mut conn)?;
+    let results = publications
+        .select((id, title.assume_not_null()))
+        .filter(title.is_not_null())
+        .load::<(Uuid, String)>(&mut conn)?;
 
     let mut map = StringMap::new();
     for (uuid, lookup) in results {

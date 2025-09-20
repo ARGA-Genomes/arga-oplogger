@@ -122,7 +122,12 @@ tsi:collecting {
   <organism_kill_method>     :same tsi:Collecting:organism_kill_method.
   <field_sample_disposition> :same tsi:Collecting:field_sample_disposition.
   <field_notes>              :same tsi:Collecting:field_notes.
+
+  <citation>                 :same tsi:collecting:data_source.
+  <source_url>               :same tsi:collecting:source_URL.
+  <doi>                      :same tsi:collecting:source_URL.
 }
+
 
 
 # tissues
@@ -154,8 +159,9 @@ tsi:tissues {
   <fixation>                :same tsi:tissues:tissue_fixation.
   <storage>                 :same tsi:tissues:tissue_storage.
 
-  <source>                  :same tsi:tissues:source.
+  <citation>                :same tsi:tissues:source.
   <source_url>              :same tsi:tissues:source_URL.
+  <doi>                     :same tsi:tissues:source_URL.
 }
 
 
@@ -189,4 +195,12 @@ tsi:registrations {
   <disposition>             :same tsi:registrations:specimen_disposition.
   <fixation>                :same tsi:registrations:specimen_fixation.
   <storage>                 :same tsi:registrations:specimen_storage.
+
+  <citation>                :same tsi:registrations:source.
+  <source_url>              :same tsi:registrations:source_URL.
+  <doi>                     :same tsi:registrations:source_URL.
 }
+
+
+
+<publication_entity_id> :hash_first (<doi> <citation>).

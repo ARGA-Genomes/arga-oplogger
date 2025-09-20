@@ -5,19 +5,19 @@ use std::path::PathBuf;
 use arga_core::crdt::{DataFrame, Version};
 use arga_core::models::NomenclaturalActType;
 use chrono::DateTime;
-use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
+use quick_xml::events::{BytesStart, Event};
 use tracing::info;
 use uuid::Uuid;
 use xxhash_rust::xxh3::Xxh3;
 
-use super::parsing::{end_eq, parse_attribute, parse_attribute_opt, start_eq, ParseSection};
+use super::parsing::{ParseSection, end_eq, parse_attribute, parse_attribute_opt, start_eq};
 use super::sections::prelude::*;
 use super::sections::treatment::Treatment;
 use crate::errors::{Error, ParseError};
 use crate::frames::{FrameReader, IntoFrame};
 use crate::utils::FrameImportBars;
-use crate::{nomenclatural_acts, publications, FrameProgress};
+use crate::{FrameProgress, nomenclatural_acts, publications};
 
 
 pub fn import_all(input_dir: PathBuf, dataset_version: Uuid) -> Result<(), Error> {
@@ -267,10 +267,10 @@ impl TryIntoRecord<publications::Record> for (DocumentHeader, Treatment) {
 
         let record = publications::Record {
             entity_id: document.entity_id,
-            title: document.title,
+            title: Some(document.title),
             authors: Some(vec![document.authors]),
-            published_year: document.date_issued.parse::<i32>()?,
-            source_url: document.id,
+            published_year: Some(document.date_issued.parse::<i32>()?),
+            source_url: Some(document.id),
             published_date: None,
             language: document.language,
             publisher: Some(document.publisher),

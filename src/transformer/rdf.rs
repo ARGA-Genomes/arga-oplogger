@@ -78,6 +78,68 @@ impl TryFrom<&SimpleTerm<'static>> for Rdfs {
 
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Publication {
+    #[iri("fields:publication_entity_id")]
+    EntityId,
+    #[iri("fields:title")]
+    Title,
+    #[iri("fields:authors")]
+    Authors,
+    #[iri("fields:published_year")]
+    PublishedYear,
+    #[iri("fields:published_date")]
+    PublishedDate,
+    #[iri("fields:language")]
+    Language,
+    #[iri("fields:publisher")]
+    Publisher,
+    #[iri("fields:doi")]
+    Doi,
+    #[iri("fields:publication_type")]
+    PublicationType,
+    #[iri("fields:citation")]
+    Citation,
+    #[iri("fields:source_url")]
+    SourceUrl,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum PublicationField {
+    EntityId(String),
+    Title(String),
+    Authors(String),
+    PublishedYear(String),
+    PublishedDate(String),
+    Language(String),
+    Publisher(String),
+    Doi(String),
+    PublicationType(String),
+    Citation(String),
+    SourceUrl(String),
+}
+
+impl From<(Publication, Literal)> for PublicationField {
+    fn from(source: (Publication, Literal)) -> Self {
+        match source {
+            (Publication::EntityId, Literal::String(value)) => Self::EntityId(value),
+            (Publication::Title, Literal::String(value)) => Self::Title(value),
+            (Publication::Authors, Literal::String(value)) => Self::Authors(value),
+            (Publication::PublishedYear, Literal::String(value)) => Self::PublishedYear(value),
+            (Publication::PublishedDate, Literal::String(value)) => Self::PublishedDate(value),
+            (Publication::Language, Literal::String(value)) => Self::Language(value),
+            (Publication::Publisher, Literal::String(value)) => Self::Publisher(value),
+            (Publication::Doi, Literal::String(value)) => Self::Doi(value),
+            (Publication::PublicationType, Literal::String(value)) => Self::PublicationType(value),
+            (Publication::Citation, Literal::String(value)) => Self::Citation(value),
+            (Publication::SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
+        }
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Tissue {
     #[iri("fields:organism_id")]
     OrganismId,
@@ -121,8 +183,8 @@ pub enum Tissue {
     Fixation,
     #[iri("fields:storage")]
     Storage,
-    #[iri("fields:source")]
-    Source,
+    #[iri("fields:citation")]
+    Citation,
     #[iri("fields:source_url")]
     SourceUrl,
 }
@@ -151,7 +213,7 @@ pub enum TissueField {
     Disposition(String),
     Fixation(String),
     Storage(String),
-    Source(String),
+    Citation(String),
     SourceUrl(String),
 }
 
@@ -180,7 +242,7 @@ impl From<(Tissue, Literal)> for TissueField {
             (Tissue::Disposition, Literal::String(value)) => Self::Disposition(value),
             (Tissue::Fixation, Literal::String(value)) => Self::Fixation(value),
             (Tissue::Storage, Literal::String(value)) => Self::Storage(value),
-            (Tissue::Source, Literal::String(value)) => Self::Source(value),
+            (Tissue::Citation, Literal::String(value)) => Self::Citation(value),
             (Tissue::SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
         }
     }

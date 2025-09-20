@@ -215,13 +215,15 @@
                             :has fields:material_extracted_by;
                             :has fields:material_extracted_by_entity_id.
 
-# tagging fields that can be transposed into other structures
-fields:agent_full_name :same fields:registered_by;
-                       :same fields:extracted_by;
-                       :same fields:material_extracted_by.
 
-fields:agent_orcid :same fields:registered_by_orcid;
-                   :same fields:extracted_by_orcid.
-
-fields:agent_entity_id :same fields:extracted_by_entity_id;
-                       :same fields:material_extracted_by_entity_id.
+<publication> :has fields:title;
+              :has fields:authors;
+              :has fields:published_year;
+              :has fields:published_date;
+              :has fields:language;
+              :has fields:publisher;
+              :has fields:doi;
+              :has fields:publication_type;
+              :has fields:citation;
+              :has fields:publication_entity_id;
+              :has fields:source_url.

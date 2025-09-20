@@ -9,7 +9,9 @@ use crate::transformer::dataset::PartialGraph;
 use crate::transformer::rdf::{IntoIriTerm, Literal, Map, Mapping, Rdfs, ToIriOwned, try_from_iri};
 
 
-pub type FieldMap = HashMap<iref::IriBuf, Map>;
+pub type FieldMap = HashMap<iref::IriBuf, Vec<Map>>;
+pub type ValueMap = HashMap<iref::IriBuf, Vec<Literal>>;
+pub type RecordMap = HashMap<Literal, ValueMap>;
 
 
 #[tracing::instrument(skip_all)]
@@ -29,35 +31,23 @@ where
     // get the predicate terms to find matching triples for. in our case the predicate
     // is the mapped field name with the subject being the record entity_id and the object
     // being the value of the field.
-    let mut terms = Vec::new();
-
-    for field_iri in &field_iris {
-        match map.get(*field_iri) {
-            Some(Map::Same(mapping)) => terms.push(mapping.into_iri_term()?),
-            Some(Map::HashFirst(iris)) => {
-                for iri in iris {
-                    match map.get(iri) {
-                        Some(Map::Same(mapping)) => Ok(terms.push(mapping.into_iri_term()?)),
-                        Some(unsupported) => Err(ResolveError::UnsupportedMapping(unsupported.clone())),
-                        None => Err(ResolveError::IriNotFound(iri.to_string())),
-                    }?;
-                }
-            }
-            _ => {}
-        }
-    }
+    let terms = resolve_field_terms(&field_iris, &map)?;
+    let terms = Vec::from_iter(terms);
 
     // the field names in the matched triples will be the specific source model field which means
     // we need to build a simple map to get the field type that it is mapped to
-    let mut reverse_map: HashMap<&iref::IriBuf, &iref::IriBuf> = HashMap::new();
+    let mut reverse_map: HashMap<&iref::IriBuf, Vec<&iref::IriBuf>> = HashMap::new();
     for (key, value) in map.iter() {
-        if let Map::Same(mapped_from) = value {
-            reverse_map.insert(mapped_from, key);
+        for field in value {
+            if let Map::Same(mapped_from) = field {
+                reverse_map.entry(mapped_from).or_default().push(key);
+            }
         }
     }
 
+
     // get the data and use the reverse map to associate the entity_id of the record to a list of fields
-    let mut mapped: HashMap<Literal, HashMap<iref::IriBuf, Literal>> = HashMap::new();
+    let mut records = RecordMap::new();
 
     for triple in graph.triples_matching(Any, terms.as_slice(), Any) {
         let [s, p, o] = triple?;
@@ -68,7 +58,7 @@ where
 
         let mapped_to_iri = match p {
             SimpleTerm::Iri(iri) => match reverse_map.get(&iri.to_iri_owned()?) {
-                Some(iri) => Ok(*iri),
+                Some(iris) => Ok(iris),
                 None => Err(ResolveError::IriNotFound(iri.to_string())),
             }?,
             _ => unimplemented!(),
@@ -80,7 +70,13 @@ where
         };
 
 
-        mapped.entry(subject).or_default().insert(mapped_to_iri.clone(), value);
+        // copy the resolved data to all iris that are mapped to it. its
+        // possible to map the same source iri to multiple model iris which
+        // means we have to clone the data into all of them
+        let record = records.entry(subject).or_default();
+        for iri in mapped_to_iri {
+            record.entry((**iri).clone()).or_default().push(value.clone());
+        }
     }
 
 
@@ -92,31 +88,38 @@ where
             .get(field_iri)
             .ok_or(ResolveError::IriNotFound(field_iri.to_string()))?;
 
-        for (entity_id, fields) in mapped.iter() {
-            let result = match mapping {
-                // no transformation necessary so just copy the value as is
-                Map::Same(_iri) => fields.get(field_iri),
-                Map::Hash(_iri) => fields.get(field_iri),
+        for (entity_id, fields) in records.iter() {
+            for field_map in mapping {
+                let result = match field_map {
+                    // no transformation necessary so just copy the value as is
+                    Map::Same(_iri) => fields.get(field_iri),
+                    Map::Hash(_iri) => fields.get(field_iri),
 
-                // iterate over all the values in the list and return the
-                // first non empty value
-                Map::HashFirst(iris) => {
-                    let mut value = None;
-                    for iri in iris {
-                        if let Some(val) = fields.get(iri) {
-                            value = Some(val);
-                            break;
+                    // iterate over all the values in the list and return the
+                    // first non empty value
+                    Map::HashFirst(iris) => {
+                        let mut value = None;
+                        for iri in iris {
+                            if let Some(val) = fields.get(iri) {
+                                value = Some(val);
+                                break;
+                            }
                         }
+                        value
                     }
-                    value
-                }
-            };
+                };
 
-            if let Some(result) = result {
-                let mapped_from =
-                    T::try_from(field_iri).map_err(|_| TransformError::InvalidMappingIri(field_iri.to_string()))?;
-                let field: R = (mapped_from, result.clone()).into();
-                data.entry(entity_id.clone()).or_default().push(field);
+
+                // add all the fields even if there are multiple of the same.
+                // uniqueness or disambiguation is a job outside this function
+                if let Some(result) = result {
+                    for value in result {
+                        let mapped_from = T::try_from(field_iri)
+                            .map_err(|_| TransformError::InvalidMappingIri(field_iri.to_string()))?;
+                        let field: R = (mapped_from, value.clone()).into();
+                        data.entry(entity_id.clone()).or_default().push(field);
+                    }
+                }
             }
         }
     }
@@ -167,7 +170,7 @@ where
         };
 
         match s {
-            SimpleTerm::Iri(iri_ref) => resolved.insert(iri_ref.to_iri_owned()?, map),
+            SimpleTerm::Iri(iri_ref) => resolved.entry(iri_ref.to_iri_owned()?).or_default().push(map),
             _ => unimplemented!(),
         };
     }
@@ -208,4 +211,53 @@ pub fn collect_iris(
     }
 
     Ok(())
+}
+
+
+#[tracing::instrument(skip_all)]
+pub fn resolve_field_terms<'a>(
+    fields: &Vec<&iref::Iri>,
+    map: &'a FieldMap,
+) -> Result<std::collections::HashSet<SimpleTerm<'a>>, TransformError> {
+    let mut terms = std::collections::HashSet::new();
+
+    for field_iri in fields {
+        // get all the mapping referenced by the field
+        let mapping = match map.get(*field_iri) {
+            Some(mapping) => Ok(mapping),
+            None => Err(ResolveError::IriNotFound(field_iri.to_string())),
+        }?;
+
+        // because a field can be mapped to many other fields due to
+        // it being present for different graphs we want to make sure to
+        // get all of them when determining the terms
+        for field_map in mapping {
+            match field_map {
+                Map::Same(mapping) => {
+                    terms.insert(mapping.into_iri_term()?);
+                }
+                Map::Hash(_iri) => todo!(),
+                Map::HashFirst(iris) => {
+                    // rather than resolving all the fields in the HashFirst mapping
+                    // we iterate over it here since we only want to support the :same
+                    // operator otherwise the complexity will drive deeper than it needs to be
+                    for iri in iris {
+                        let mapping = match map.get(iri) {
+                            Some(mapping) => Ok(mapping),
+                            None => Err(ResolveError::IriNotFound(field_iri.to_string())),
+                        }?;
+
+                        for field_map in mapping {
+                            match field_map {
+                                Map::Same(mapping) => Ok(terms.insert(mapping.into_iri_term()?)),
+                                unsupported => Err(ResolveError::UnsupportedMapping(unsupported.clone())),
+                            }?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(terms)
 }

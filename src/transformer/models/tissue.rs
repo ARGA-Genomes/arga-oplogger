@@ -73,7 +73,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Tissue>, Error> {
             Disposition,
             Fixation,
             Storage,
-            Source,
+            Citation,
             SourceUrl,
         ],
     )?;
@@ -112,7 +112,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Tissue>, Error> {
                 TissueField::Disposition(val) => tissue.disposition = Some(val),
                 TissueField::Fixation(val) => tissue.fixation = Some(val),
                 TissueField::Storage(val) => tissue.storage = Some(val),
-                TissueField::Source(val) => tissue.source = Some(val),
+                TissueField::Citation(val) => tissue.source = Some(val),
                 TissueField::SourceUrl(val) => tissue.source_url = Some(val),
             }
         }

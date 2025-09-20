@@ -91,6 +91,8 @@ fn export(dataset: Dataset) -> Result<(), Error> {
     info!("Exporting TriG dataset as importable CSV files");
 
     export_agents(&dataset)?;
+    export_publications(&dataset)?;
+
     export_organisms(&dataset)?;
     export_collections(&dataset)?;
     export_tissues(&dataset)?;
@@ -112,6 +114,19 @@ fn export_agents(dataset: &Dataset) -> Result<(), Error> {
 
     Ok(())
 }
+
+#[tracing::instrument(skip_all)]
+fn export_publications(dataset: &Dataset) -> Result<(), Error> {
+    let publications = models::publications::get_all(&dataset)?;
+
+    let mut writer = csv::Writer::from_path("publications.csv")?;
+    for publication in publications {
+        writer.serialize(publication)?;
+    }
+
+    Ok(())
+}
+
 
 #[tracing::instrument(skip_all)]
 fn export_organisms(dataset: &Dataset) -> Result<(), Error> {

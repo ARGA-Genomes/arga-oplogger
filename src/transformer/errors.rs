@@ -21,9 +21,6 @@ pub enum TransformError {
     #[error("Inserting quads failed")]
     Insert(String),
 
-    #[error(transparent)]
-    Sparql(#[from] sophia::sparql::SparqlWrapperError<sophia::inmem::index::TermIndexFullError>),
-
     #[error("Invalid field triple. Fields must be an IRI with a literal value")]
     Field {
         field: Option<crate::transformer::rdf::Value>,
