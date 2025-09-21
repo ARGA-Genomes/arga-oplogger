@@ -147,7 +147,7 @@ checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
 [[package]]
 name = "arga-core"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#8f9ab44eabcfb9a8a735c1ae436006e60df261b1"
+source = "git+https://github.com/ARGA-Genomes/arga-backend.git#2da68a0f107dc391a0a6d059c67c031b86dce99f"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -468,7 +468,7 @@ dependencies = [
 [[package]]
 name = "core-derive"
 version = "0.1.0"
-source = "git+https://github.com/ARGA-Genomes/arga-backend.git#8f9ab44eabcfb9a8a735c1ae436006e60df261b1"
+source = "git+https://github.com/ARGA-Genomes/arga-backend.git#2da68a0f107dc391a0a6d059c67c031b86dce99f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1360,18 +1360,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
-name = "oxrdf"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a04761319ef84de1f59782f189d072cbfc3a9a40c4e8bded8667202fbd35b02a"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "rand",
- "thiserror 2.0.16",
-]
-
-[[package]]
 name = "parking_lot"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1403,33 +1391,6 @@ dependencies = [
  "thiserror 1.0.63",
  "utf8-decode",
 ]
-
-[[package]]
-name = "peg"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9928cfca101b36ec5163e70049ee5368a8a1c3c6efc9ca9c5f9cc2f816152477"
-dependencies = [
- "peg-macros",
- "peg-runtime",
-]
-
-[[package]]
-name = "peg-macros"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6298ab04c202fa5b5d52ba03269fb7b74550b150323038878fe6c372d8280f71"
-dependencies = [
- "peg-runtime",
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "peg-runtime"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "132dca9b868d927b35b5dd728167b2dee150eb1ad686008fc71ccb298b776fca"
 
 [[package]]
 name = "pin-project-lite"
@@ -1756,12 +1717,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha1_smol"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1812,7 +1767,6 @@ dependencies = [
  "sophia_isomorphism",
  "sophia_resource",
  "sophia_rio",
- "sophia_sparql",
  "sophia_term",
  "sophia_turtle",
 ]
@@ -1902,26 +1856,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sophia_sparql"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6393da350dacc9f1d9bf57df4ccbf39f9c1c8e10554747d91bd1321413b10a82"
-dependencies = [
- "bigdecimal",
- "chrono",
- "num-bigint",
- "oxiri",
- "rand",
- "sophia_api",
- "sophia_inmem",
- "sophia_iri",
- "sophia_term",
- "spargebra",
- "thiserror 2.0.16",
- "uuid",
-]
-
-[[package]]
 name = "sophia_term"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1944,20 +1878,6 @@ dependencies = [
  "sophia_api",
  "sophia_iri",
  "sophia_rio",
-]
-
-[[package]]
-name = "spargebra"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8907e262be4b4b363218f4688f5654d423a958aa4b8d7c7a7f898be591fa474e"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "oxrdf",
- "peg",
- "rand",
- "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -2399,7 +2319,6 @@ dependencies = [
  "getrandom 0.3.3",
  "js-sys",
  "serde",
- "sha1_smol",
  "wasm-bindgen",
 ]
 

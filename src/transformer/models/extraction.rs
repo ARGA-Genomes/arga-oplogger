@@ -12,6 +12,7 @@ use crate::transformer::resolver::resolve_data;
 pub struct Extraction {
     pub entity_id: String,
     pub subsample_id: Option<String>,
+    pub publication_id: Option<String>,
     pub extract_id: Option<String>,
     pub extracted_by: Option<String>,
     pub material_extracted_by: Option<String>,
@@ -66,6 +67,9 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
             MaterialExtractedBy,
             MaterialExtractedByOrcid,
             MaterialExtractedByEntityId,
+            PublicationEntityId,
+            Doi,
+            Citation,
         ],
     )?;
 
@@ -103,10 +107,15 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
                 // only include the entity id for agents as they will be referenced instead
                 ExtractionField::ExtractedByEntityId(val) => extraction.extracted_by = Some(val),
                 ExtractionField::MaterialExtractedByEntityId(val) => extraction.material_extracted_by = Some(val),
+                ExtractionField::PublicationEntityId(val) => extraction.publication_id = Some(val),
+
+                // fields we don't need to action as it's used in the production of the reference entity id
                 ExtractionField::ExtractedBy(_) => {}
                 ExtractionField::ExtractedByOrcid(_) => {}
                 ExtractionField::MaterialExtractedBy(_) => {}
                 ExtractionField::MaterialExtractedByOrcid(_) => {}
+                ExtractionField::Doi(_) => {}
+                ExtractionField::Citation(_) => {}
             }
         }
 

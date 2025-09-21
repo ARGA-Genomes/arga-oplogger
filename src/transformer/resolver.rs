@@ -244,7 +244,7 @@ pub fn resolve_field_terms<'a>(
                     for iri in iris {
                         let mapping = match map.get(iri) {
                             Some(mapping) => Ok(mapping),
-                            None => Err(ResolveError::IriNotFound(field_iri.to_string())),
+                            None => Err(ResolveError::IriNotFound(iri.to_string())),
                         }?;
 
                         for field_map in mapping {

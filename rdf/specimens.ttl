@@ -203,4 +203,5 @@ tsi:registrations {
 
 
 
-<publication_entity_id> :hash_first (<doi> <citation>).
+# bnodes will clash with ones specified in graphs if converted into triples via a union graph
+# <publication_entity_id> :hash_first (<doi> <citation>).

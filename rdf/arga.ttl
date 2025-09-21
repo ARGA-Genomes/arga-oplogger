@@ -182,6 +182,7 @@
 
 <extraction_event> :has fields:subsample_id;
                    :has fields:extract_id;
+                   :has fields:publication_entity_id;
 
                    :has fields:extracted_by;
                    :has fields:extracted_by_orcid;
@@ -216,7 +217,8 @@
                             :has fields:material_extracted_by_entity_id.
 
 
-<publication> :has fields:title;
+<publication> :has fields:publication_entity_id;
+              :has fields:title;
               :has fields:authors;
               :has fields:published_year;
               :has fields:published_date;
@@ -225,5 +227,4 @@
               :has fields:doi;
               :has fields:publication_type;
               :has fields:citation;
-              :has fields:publication_entity_id;
               :has fields:source_url.

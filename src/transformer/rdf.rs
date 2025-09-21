@@ -630,11 +630,17 @@ pub enum Extraction {
     ExtractionMethod,
     #[iri("fields:number_of_extracts_pooled")]
     NumberOfExtractsPooled,
+    #[iri("fields:doi")]
+    Doi,
+    #[iri("fields:citation")]
+    Citation,
 
     #[iri("fields:extracted_by_entity_id")]
     ExtractedByEntityId,
     #[iri("fields:material_extracted_by_entity_id")]
     MaterialExtractedByEntityId,
+    #[iri("fields:publication_entity_id")]
+    PublicationEntityId,
 }
 
 
@@ -659,9 +665,12 @@ pub enum ExtractionField {
     ActionExtracted(String),
     ExtractionMethod(String),
     NumberOfExtractsPooled(String),
+    Doi(String),
+    Citation(String),
 
     ExtractedByEntityId(String),
     MaterialExtractedByEntityId(String),
+    PublicationEntityId(String),
 }
 
 
@@ -688,9 +697,12 @@ impl From<(Extraction, Literal)> for ExtractionField {
             (ActionExtracted, Literal::String(value)) => Self::ActionExtracted(value),
             (ExtractionMethod, Literal::String(value)) => Self::ExtractionMethod(value),
             (NumberOfExtractsPooled, Literal::String(value)) => Self::NumberOfExtractsPooled(value),
+            (Doi, Literal::String(value)) => Self::Doi(value),
+            (Citation, Literal::String(value)) => Self::Citation(value),
 
             (ExtractedByEntityId, Literal::String(value)) => Self::ExtractedByEntityId(value),
             (MaterialExtractedByEntityId, Literal::String(value)) => Self::MaterialExtractedByEntityId(value),
+            (PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
         }
     }
 }

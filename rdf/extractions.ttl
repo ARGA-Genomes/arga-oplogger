@@ -38,8 +38,14 @@ tsi:extractions {
   <extraction_method>                :same tsi:lab_sample:extraction_method.
   <number_of_extracts_pooled>        :same tsi:lab_sample:n_extracts_pooled.
 
+  <citation>                         :same tsi:lab_sample:source.
+  <source_url>                       :same tsi:lab_sample:source_URL.
+  <doi>                              :same tsi:lab_sample:source_URL.
+
   # use orcids as the globally unique identifier for agents when available, otherwise fall back
   # to the full name which should be little more than a name due to it's lack of uniqueness
   <extracted_by_entity_id>          :hash_first (<extracted_by_orcid> <extracted_by>).
   <material_extracted_by_entity_id> :hash_first (<material_extracted_by_orcid> <material_extracted_by>).
+
+  <publication_entity_id> :hash_first (<doi> <citation>).
 }
