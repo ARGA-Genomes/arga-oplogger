@@ -33,6 +33,7 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
     dataset.load_trig_path("rdf/specimens.ttl")?;
     dataset.load_trig_path("rdf/subsamples.ttl")?;
     dataset.load_trig_path("rdf/extractions.ttl")?;
+    dataset.load_trig_path("rdf/sequences.ttl")?;
     dataset.load_trig_path("rdf/arga.ttl")?;
 
     let file = File::open(path)?;
@@ -98,6 +99,7 @@ fn export(dataset: Dataset) -> Result<(), Error> {
     export_tissues(&dataset)?;
     export_subsamples(&dataset)?;
     export_extractions(&dataset)?;
+    export_libraries(&dataset)?;
 
     Ok(())
 }
@@ -183,6 +185,18 @@ fn export_extractions(dataset: &Dataset) -> Result<(), Error> {
     let mut writer = csv::Writer::from_path("extractions.csv")?;
     for extraction in extractions {
         writer.serialize(extraction)?;
+    }
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+fn export_libraries(dataset: &Dataset) -> Result<(), Error> {
+    let libraries = models::library::get_all(&dataset)?;
+
+    let mut writer = csv::Writer::from_path("libraries.csv")?;
+    for library in libraries {
+        writer.serialize(library)?;
     }
 
     Ok(())

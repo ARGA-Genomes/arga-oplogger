@@ -1,0 +1,59 @@
+@base <http://arga.org.au/schemas/fields/>.
+
+@prefix :               <http://arga.org.au/schemas/mapping/>.
+@prefix genbank:        <http://arga.org.au/schemas/maps/genbank/>.
+@prefix genbank_model:  <http://arga.org.au/schemas/maps/genbank/model/>.
+@prefix bpa:            <http://arga.org.au/schemas/maps/bpa/>.
+@prefix bpa_model:      <http://arga.org.au/schemas/maps/bpa/model/>.
+
+
+bpa_model:bpa_tsi :models bpa:library.
+
+
+genbank:sequence_runs
+{
+  <entity_id> :hash genbank:wgs_master.
+  <extract_id> :same genbank:biosample.
+
+  <event_date> :same genbank:seq_rel_date.
+}
+
+
+bpa:library
+{
+  # bioplatforms_library_id; bpa_library_id; library_id; bpa_library_ids
+  <entity_id>                  :hash bpa:library_id.
+
+  # bioplatforms_sample_id; bpa_sample_id; sample_id
+  <extract_id>                 :same bpa:sample_id.
+  # bioplatforms_library_id; bpa_library_id; library_id; bpa_library_ids
+  <library_id>                 :same bpa:library_id.
+
+  <event_date>                 :same bpa:library_prep_date.
+  <concentration>              :same bpa:library_ng_ul.
+  <concentration_unit>         :same "ng/µl".
+  <pcr_cycles>                 :same bpa:library_pcr_cycles.
+  <layout>                     :same bpa:library_layout.
+  <prepared_by>                :same bpa:library_prepared_by.
+  <selection>                  :same bpa:library_selection.
+  <bait_set_name>              :same bpa:bait_set_name.
+  <bait_set_reference>         :same bpa:bait_set_reference.
+  # library_construction_protocol; library_prep_method
+  <construction_protocol>      :same bpa:library_construction_protocol.
+  <source>                     :same bpa:library_source.
+  <insert_size>                :same bpa:insert_size_range.
+  <design_description>         :same bpa:experimental_design.
+
+  # library_strategy; library_type
+  <strategy>                   :same bpa:library_strategy.
+  # library_index_seq; library_index_sequence
+  <index_tag>                  :same bpa:library_index_seq.
+  <index_dual_tag>             :same bpa:library_index_seq_dual.
+  <index_oligo>                :same bpa:library_oligo_sequence.
+  <index_dual_oligo>           :same bpa:library_oligo_sequence_dual.
+  <location>                   :same bpa:library_location.
+  <remarks>                    :same bpa:library_comments.
+  <dna_treatment>              :same bpa:DNA_treatment.
+  <number_of_libraries_pooled> :same bpa:n_libraries_pooled.
+  <pcr_replicates>             :same bpa:library_pcr_reps.
+}

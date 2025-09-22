@@ -28,9 +28,10 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Publication>, TransformError> {
 
     let graphs = vec![
         "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/collecting",
-        "http://arga.org.au/schemas/maps/tsi/tissues",
-        "http://arga.org.au/schemas/maps/tsi/registrations",
+        // "http://arga.org.au/schemas/maps/tsi/organisms",
+        // "http://arga.org.au/schemas/maps/tsi/collecting",
+        // "http://arga.org.au/schemas/maps/tsi/tissues",
+        // "http://arga.org.au/schemas/maps/tsi/registrations",
         "http://arga.org.au/schemas/maps/tsi/extractions",
     ];
     let graph = dataset.graph(&graphs);

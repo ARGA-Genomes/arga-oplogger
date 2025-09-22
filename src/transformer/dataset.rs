@@ -10,7 +10,7 @@ use sophia::api::term::matcher::GraphNameMatcher;
 use sophia::api::term::{GraphName, SimpleTerm};
 use sophia::inmem::dataset::FastDataset;
 use sophia::turtle::parser::trig;
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::errors::{Error, TransformError};
 
@@ -84,19 +84,40 @@ impl Dataset {
 
             for (model, entity_id_map) in &models {
                 // get the unique record id for this row. we use it to associate
-                // all the other fields with it
-                let record_id = match entity_id_map {
-                    Transform::Hash(ref hasher) => hasher.hash(|field| {
-                        let idx = headers.get(field).ok_or(TransformError::NoHeader(field.to_string()))?;
-                        let value = record.get(*idx).ok_or(TransformError::NoHeader(field.to_string()))?;
-                        Ok(value.to_string())
-                    })?,
+                // all the other fields with it. we look for the first non-empty id
+                // by iterating over all possible maps for this graph
+                let record_id: Option<String> = entity_id_map.iter().find_map(|m| match m {
+                    Transform::Hash(ref hasher) => hasher
+                        .hash(|field| {
+                            let idx = headers.get(field).ok_or(TransformError::NoHeader(field.to_string()))?;
+                            let value = record.get(*idx).ok_or(TransformError::NoHeader(field.to_string()))?;
+                            Ok(value.to_string())
+                        })
+                        .ok(),
+                });
+
+                // skip records without an entity id. also skip
+                // if the field exists but is empty
+                let Some(record_id) = record_id
+                else {
+                    continue;
                 };
+                if record_id.trim().is_empty() {
+                    continue;
+                }
 
                 // (row_id, header, value)
                 // (literal, iri, literal)
                 // eg. (spec123, http://.../scientific_name, My species)
                 for (idx, value) in record.iter().enumerate() {
+                    // don't create a triple for empty data as the absence
+                    // of a triple is good enough. this improves performance since
+                    // we wont create indices for empty data and avoids a stack overflow
+                    // in the sophia library when there are too many columns
+                    if value.trim().is_empty() {
+                        continue;
+                    }
+
                     let header = header_row.get(idx).unwrap();
                     let header_iri = namespace.get(header).map_err(TransformError::from)?;
 
@@ -110,14 +131,7 @@ impl Dataset {
         Ok(())
     }
 
-    pub fn load_csv_path(&mut self, path: &str) -> Result<(), Error> {
-        let file = File::open(path)?;
-        let buf = BufReader::new(file);
-        self.load_csv(buf, "")?;
-        Ok(())
-    }
-
-    pub fn get_entity_id_map(&self, graph: &str) -> Result<Transform, TransformError> {
+    pub fn get_entity_id_map(&self, graph: &str) -> Result<Vec<Transform>, TransformError> {
         let base = Iri::new(super::prefix::MAPPING)?.to_base();
         let mapping = Namespace::new(base)?;
 
@@ -126,20 +140,26 @@ impl Dataset {
 
         let selector = vec![graph];
         let graph = self.graph(&selector);
-        let [_s, p, o] = graph
-            .triples_matching([entity_id], Any, Any)
-            .next()
-            .ok_or(TransformError::MissingEntityId)??;
 
-        let transform = match (o, p) {
-            (SimpleTerm::Iri(object), SimpleTerm::Iri(pred)) if mapping.get("hash")? == pred => {
-                let fields = vec![Iri::new(object.to_string())?];
-                Transform::Hash(FieldHasher { fields })
-            }
-            _ => unimplemented!(),
-        };
+        let mut transforms = Vec::new();
 
-        Ok(transform)
+        // there can be more than one entity id map for models that can
+        // be loaded via multiple sources
+        for triple in graph.triples_matching([entity_id], Any, Any) {
+            let [_s, p, o] = triple?;
+
+            let transform = match (o, p) {
+                (SimpleTerm::Iri(object), SimpleTerm::Iri(pred)) if mapping.get("hash")? == pred => {
+                    let fields = vec![Iri::new(object.to_string())?];
+                    Transform::Hash(FieldHasher { fields })
+                }
+                _ => unimplemented!(),
+            };
+
+            transforms.push(transform);
+        }
+
+        Ok(transforms)
     }
 
     // given a source model, return all the models that it can be transformed into

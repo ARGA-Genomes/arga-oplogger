@@ -228,3 +228,8 @@
               :has fields:publication_type;
               :has fields:citation;
               :has fields:source_url.
+
+
+<library> :has fields:extract_id;
+          :has fields:library_id;
+          :has fields:pcr_replicates.

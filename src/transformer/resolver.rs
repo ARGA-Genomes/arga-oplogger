@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use sophia::api::MownStr;
 use sophia::api::prelude::*;
 use sophia::api::term::{BnodeId, SimpleTerm};
+use tracing::{info, trace};
 
 use crate::errors::{ResolveError, TransformError};
 use crate::transformer::dataset::PartialGraph;
@@ -21,6 +22,7 @@ where
     R: From<(T, Literal)> + Clone,
     &'a iref::Iri: From<&'a T>,
 {
+    info!("Resolving fields");
     // resolve the full mapping plan for all fields
     let map = resolve_fields(graph, fields)?;
 
@@ -28,6 +30,7 @@ where
     let field_iris: Vec<&iref::Iri> = fields.iter().map(|f| f.into()).collect();
 
 
+    info!("Resolving field terms");
     // get the predicate terms to find matching triples for. in our case the predicate
     // is the mapped field name with the subject being the record entity_id and the object
     // being the value of the field.
@@ -145,6 +148,7 @@ where
         terms.push(iri.into_iri_term()?);
     }
 
+    trace!(?terms, "Matching triples");
     for triple in graph.triples_matching(terms.as_slice(), Any, Any) {
         let [s, p, o] = triple?;
 

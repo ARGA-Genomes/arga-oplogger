@@ -6,7 +6,7 @@
 
 
 # The tsi dataset combines subsamples and extractions into one model
-# called lab_samples. We transpose a subset of that model into a subsample
+# called lab_samples. We transpose a subset of that model into an extraction
 tsi_model:lab_samples :models tsi:extractions.
 
 

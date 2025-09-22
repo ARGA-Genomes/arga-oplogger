@@ -446,6 +446,58 @@ pub enum Organism {
     LiveState,
     #[iri("fields:remarks")]
     Remarks,
+
+    #[iri("fields:identified_by")]
+    IdentifiedBy,
+    #[iri("fields:identification_date")]
+    IdentificationDate,
+    #[iri("fields:disposition")]
+    Disposition,
+    #[iri("fields:first_observed_at")]
+    FirstObservedAt,
+    #[iri("fields:last_known_alive_at")]
+    LastKnownAliveAt,
+
+    #[iri("fields:biome")]
+    Biome,
+    #[iri("fields:habitat")]
+    Habitat,
+    #[iri("fields:bioregion")]
+    Bioregion,
+    #[iri("fields:ibra_imcra")]
+    IbraImcra,
+
+    #[iri("fields:latitude")]
+    Latitude,
+    #[iri("fields:longitude")]
+    Longitude,
+    #[iri("fields:coordinate_system")]
+    CoordinateSystem,
+    #[iri("fields:location_source")]
+    LocationSource,
+    #[iri("fields:holding")]
+    Holding,
+    #[iri("fields:holding_id")]
+    HoldingId,
+    #[iri("fields:holding_permit")]
+    HoldingPermit,
+
+    #[iri("fields:doi")]
+    Doi,
+    #[iri("fields:citation")]
+    Citation,
+
+    #[iri("fields:curator")]
+    Curator,
+    #[iri("fields:curator_orcid")]
+    CuratorOrcid,
+    #[iri("fields:created_at")]
+    CreatedAt,
+    #[iri("fields:updated_at")]
+    UpdatedAt,
+
+    #[iri("fields:publication_entity_id")]
+    PublicationEntityId,
 }
 
 
@@ -461,6 +513,30 @@ pub enum OrganismField {
     Behavior(String),
     LiveState(String),
     Remarks(String),
+    IdentifiedBy(String),
+    IdentificationDate(String),
+    Disposition(String),
+    FirstObservedAt(String),
+    LastKnownAliveAt(String),
+    Biome(String),
+    Habitat(String),
+    Bioregion(String),
+    IbraImcra(String),
+    Latitude(String),
+    Longitude(String),
+    CoordinateSystem(String),
+    LocationSource(String),
+    Holding(String),
+    HoldingId(String),
+    HoldingPermit(String),
+    Doi(String),
+    Citation(String),
+    Curator(String),
+    CuratorOrcid(String),
+    CreatedAt(String),
+    UpdatedAt(String),
+
+    PublicationEntityId(String),
 }
 
 
@@ -477,6 +553,30 @@ impl From<(Organism, Literal)> for OrganismField {
             (Organism::Behavior, Literal::String(value)) => Self::Behavior(value),
             (Organism::LiveState, Literal::String(value)) => Self::LiveState(value),
             (Organism::Remarks, Literal::String(value)) => Self::Remarks(value),
+            (Organism::IdentifiedBy, Literal::String(value)) => Self::IdentifiedBy(value),
+            (Organism::IdentificationDate, Literal::String(value)) => Self::IdentificationDate(value),
+            (Organism::Disposition, Literal::String(value)) => Self::Disposition(value),
+            (Organism::FirstObservedAt, Literal::String(value)) => Self::FirstObservedAt(value),
+            (Organism::LastKnownAliveAt, Literal::String(value)) => Self::LastKnownAliveAt(value),
+            (Organism::Biome, Literal::String(value)) => Self::Biome(value),
+            (Organism::Habitat, Literal::String(value)) => Self::Habitat(value),
+            (Organism::Bioregion, Literal::String(value)) => Self::Bioregion(value),
+            (Organism::IbraImcra, Literal::String(value)) => Self::IbraImcra(value),
+            (Organism::Latitude, Literal::String(value)) => Self::Latitude(value),
+            (Organism::Longitude, Literal::String(value)) => Self::Longitude(value),
+            (Organism::CoordinateSystem, Literal::String(value)) => Self::CoordinateSystem(value),
+            (Organism::LocationSource, Literal::String(value)) => Self::LocationSource(value),
+            (Organism::Holding, Literal::String(value)) => Self::Holding(value),
+            (Organism::HoldingId, Literal::String(value)) => Self::HoldingId(value),
+            (Organism::HoldingPermit, Literal::String(value)) => Self::HoldingPermit(value),
+            (Organism::Doi, Literal::String(value)) => Self::Doi(value),
+            (Organism::Citation, Literal::String(value)) => Self::Citation(value),
+            (Organism::Curator, Literal::String(value)) => Self::Curator(value),
+            (Organism::CuratorOrcid, Literal::String(value)) => Self::CuratorOrcid(value),
+            (Organism::CreatedAt, Literal::String(value)) => Self::CreatedAt(value),
+            (Organism::UpdatedAt, Literal::String(value)) => Self::UpdatedAt(value),
+
+            (Organism::PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
         }
     }
 }
@@ -703,6 +803,127 @@ impl From<(Extraction, Literal)> for ExtractionField {
             (ExtractedByEntityId, Literal::String(value)) => Self::ExtractedByEntityId(value),
             (MaterialExtractedByEntityId, Literal::String(value)) => Self::MaterialExtractedByEntityId(value),
             (PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
+        }
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Library {
+    #[iri("fields:extract_id")]
+    ExtractId,
+    #[iri("fields:library_id")]
+    LibraryId,
+
+    #[iri("fields:event_date")]
+    EventDate,
+    #[iri("fields:concentration")]
+    Concentration,
+    #[iri("fields:concentration_unit")]
+    ConcentrationUnit,
+    #[iri("fields:pcr_cycles")]
+    PcrCycles,
+    #[iri("fields:layout")]
+    Layout,
+    #[iri("fields:prepared_by")]
+    PreparedBy,
+    #[iri("fields:selection")]
+    Selection,
+    #[iri("fields:bait_set_name")]
+    BaitSetName,
+    #[iri("fields:bait_set_reference")]
+    BaitSetReference,
+    #[iri("fields:construction_protocol")]
+    ConstructionProtocol,
+    #[iri("fields:source")]
+    Source,
+    #[iri("fields:insert_size")]
+    InsertSize,
+    #[iri("fields:design_description")]
+    DesignDescription,
+    #[iri("fields:strategy")]
+    Strategy,
+    #[iri("fields:index_tag")]
+    IndexTag,
+    #[iri("fields:index_dual_tag")]
+    IndexDualTag,
+    #[iri("fields:index_oligo")]
+    IndexOligo,
+    #[iri("fields:index_dual_oligo")]
+    IndexDualOligo,
+    #[iri("fields:location")]
+    Location,
+    #[iri("fields:remarks")]
+    Remarks,
+    #[iri("fields:dna_treatment")]
+    DnaTreatment,
+    #[iri("fields:number_of_libraries_pooled")]
+    NumberOfLibrariesPooled,
+    #[iri("fields:pcr_replicates")]
+    PcrReplicates,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum LibraryField {
+    ExtractId(String),
+    LibraryId(String),
+    EventDate(String),
+    Concentration(String),
+    ConcentrationUnit(String),
+    PcrCycles(String),
+    Layout(String),
+    PreparedBy(String),
+    Selection(String),
+    BaitSetName(String),
+    BaitSetReference(String),
+    ConstructionProtocol(String),
+    Source(String),
+    InsertSize(String),
+    DesignDescription(String),
+    Strategy(String),
+    IndexTag(String),
+    IndexDualTag(String),
+    IndexOligo(String),
+    IndexDualOligo(String),
+    Location(String),
+    Remarks(String),
+    DnaTreatment(String),
+    NumberOfLibrariesPooled(String),
+    PcrReplicates(String),
+}
+
+
+impl From<(Library, Literal)> for LibraryField {
+    fn from(source: (Library, Literal)) -> Self {
+        use Library::*;
+        match source {
+            (ExtractId, Literal::String(value)) => Self::ExtractId(value),
+            (LibraryId, Literal::String(value)) => Self::LibraryId(value),
+            (EventDate, Literal::String(value)) => Self::EventDate(value),
+            (Concentration, Literal::String(value)) => Self::Concentration(value),
+            (ConcentrationUnit, Literal::String(value)) => Self::ConcentrationUnit(value),
+            (PcrCycles, Literal::String(value)) => Self::PcrCycles(value),
+            (Layout, Literal::String(value)) => Self::Layout(value),
+            (PreparedBy, Literal::String(value)) => Self::PreparedBy(value),
+            (Selection, Literal::String(value)) => Self::Selection(value),
+            (BaitSetName, Literal::String(value)) => Self::BaitSetName(value),
+            (BaitSetReference, Literal::String(value)) => Self::BaitSetReference(value),
+            (ConstructionProtocol, Literal::String(value)) => Self::ConstructionProtocol(value),
+            (Source, Literal::String(value)) => Self::Source(value),
+            (InsertSize, Literal::String(value)) => Self::InsertSize(value),
+            (DesignDescription, Literal::String(value)) => Self::DesignDescription(value),
+            (Strategy, Literal::String(value)) => Self::Strategy(value),
+            (IndexTag, Literal::String(value)) => Self::IndexTag(value),
+            (IndexDualTag, Literal::String(value)) => Self::IndexDualTag(value),
+            (IndexOligo, Literal::String(value)) => Self::IndexOligo(value),
+            (IndexDualOligo, Literal::String(value)) => Self::IndexDualOligo(value),
+            (Location, Literal::String(value)) => Self::Location(value),
+            (Remarks, Literal::String(value)) => Self::Remarks(value),
+            (DnaTreatment, Literal::String(value)) => Self::DnaTreatment(value),
+            (NumberOfLibrariesPooled, Literal::String(value)) => Self::NumberOfLibrariesPooled(value),
+            (PcrReplicates, Literal::String(value)) => Self::PcrReplicates(value),
         }
     }
 }
