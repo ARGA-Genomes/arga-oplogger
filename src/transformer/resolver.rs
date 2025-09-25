@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use sophia::api::MownStr;
 use sophia::api::prelude::*;
 use sophia::api::term::{BnodeId, SimpleTerm};
-use tracing::{info, trace};
+use tracing::{info, trace, warn};
 
 use crate::errors::{ResolveError, TransformError};
 use crate::transformer::dataset::PartialGraph;
@@ -16,20 +16,11 @@ pub type RecordMap = HashMap<Literal, ValueMap>;
 
 
 #[tracing::instrument(skip_all)]
-pub fn resolve_data<'a, T, R>(graph: &PartialGraph, fields: &'a [T]) -> Result<HashMap<Literal, Vec<R>>, TransformError>
-where
-    T: Into<&'a iref::Iri> + TryFrom<&'a iref::Iri> + std::fmt::Debug,
-    R: From<(T, Literal)> + Clone,
-    &'a iref::Iri: From<&'a T>,
-{
-    info!("Resolving fields");
-    // resolve the full mapping plan for all fields
-    let map = resolve_fields(graph, fields)?;
-
-    // get the iri for all fields to resolve
-    let field_iris: Vec<&iref::Iri> = fields.iter().map(|f| f.into()).collect();
-
-
+pub fn load_records(
+    graph: &PartialGraph,
+    map: &FieldMap,
+    field_iris: &Vec<&iref::Iri>,
+) -> Result<RecordMap, TransformError> {
     info!("Resolving field terms");
     // get the predicate terms to find matching triples for. in our case the predicate
     // is the mapped field name with the subject being the record entity_id and the object
@@ -39,21 +30,28 @@ where
 
     // the field names in the matched triples will be the specific source model field which means
     // we need to build a simple map to get the field type that it is mapped to
-    let mut reverse_map: HashMap<&iref::IriBuf, Vec<&iref::IriBuf>> = HashMap::new();
+    let mut reverse_map: HashMap<iref::IriBuf, Vec<iref::IriBuf>> = HashMap::new();
     for (key, value) in map.iter() {
         for field in value {
-            if let Map::Same(mapped_from) = field {
-                reverse_map.entry(mapped_from).or_default().push(key);
+            let iris = match field {
+                Map::Same(iri) => vec![iri.clone()],
+                Map::Combines(iris) => iris.clone(),
+                Map::Hash(iri) => vec![iri.clone()],
+                Map::HashFirst(iris) => iris.clone(),
+            };
+
+            for mapped_from in iris {
+                reverse_map.entry(mapped_from).or_default().push(key.clone());
             }
         }
     }
 
-
-    // get the data and use the reverse map to associate the entity_id of the record to a list of fields
+    // get the data and use the reverse map to associate the record with a list of fields
     let mut records = RecordMap::new();
 
     for triple in graph.triples_matching(Any, terms.as_slice(), Any) {
         let [s, p, o] = triple?;
+
         let subject = match s {
             SimpleTerm::LiteralDatatype(value, _type) => Literal::String(value.to_string()),
             _ => unimplemented!(),
@@ -78,18 +76,40 @@ where
         // means we have to clone the data into all of them
         let record = records.entry(subject).or_default();
         for iri in mapped_to_iri {
-            record.entry((**iri).clone()).or_default().push(value.clone());
+            record.entry(iri.clone()).or_default().push(value.clone());
         }
     }
 
+    Ok(records)
+}
+
+
+#[tracing::instrument(skip_all)]
+pub fn resolve_data<'a, T, R>(graph: &PartialGraph, fields: &'a [T]) -> Result<HashMap<Literal, Vec<R>>, TransformError>
+where
+    T: Into<&'a iref::Iri> + TryFrom<&'a iref::Iri> + std::fmt::Debug,
+    R: From<(T, Literal)> + Clone,
+    &'a iref::Iri: From<&'a T>,
+{
+    info!("Resolving fields");
+    // resolve the full mapping plan for all fields
+    let map = resolve_fields(graph, fields)?;
+
+    // get the iri for all fields to resolve
+    let field_iris: Vec<&iref::Iri> = fields.iter().map(|f| f.into()).collect();
+
+
+    let records = load_records(graph, &map, &field_iris)?;
 
     let mut data: HashMap<Literal, Vec<R>> = HashMap::new();
 
     // get the transform plan for the field and add that to the final result
     for field_iri in field_iris {
-        let mapping = map
-            .get(field_iri)
-            .ok_or(ResolveError::IriNotFound(field_iri.to_string()))?;
+        let Some(mapping) = map.get(field_iri)
+        else {
+            warn!("Field mapping not found: {field_iri}");
+            continue;
+        };
 
         for (entity_id, fields) in records.iter() {
             for field_map in mapping {
@@ -109,6 +129,49 @@ where
                             }
                         }
                         value
+                    }
+
+                    // iterate over all values in the list and combine them
+                    // into a single string. we specifically want to elide fields
+                    // that don't have a value here as that's the requirement for Combines
+                    Map::Combines(iris) => {
+                        let mut to_combine: Vec<&str> = Vec::new();
+
+                        for iri in iris {
+                            // a field can be mapped to multiple source fields so we
+                            // need to handle that scenario here. this can lead to pretty
+                            // strange bugs due to the order being random so if there is
+                            // a more than one value we fail with an ambiguity error.
+                            //
+                            // the reason why this matter for Combines is because we can't
+                            // tell which value is from which graph leaving us no possible way
+                            // to combine values isolated within their graphs
+                            if let Some(values) = fields.get(iri) {
+                                let present: Vec<&String> = values
+                                    .iter()
+                                    .filter_map(|v| match v {
+                                        // only return strings with actual data
+                                        Literal::String(val) => match val.is_empty() {
+                                            true => None,
+                                            false => Some(val),
+                                        },
+                                    })
+                                    .collect();
+
+                                let value = if present.len() > 1 {
+                                    Err(ResolveError::AmbiguousMapping(iri.clone(), values.clone()))
+                                }
+                                else {
+                                    Ok(present.first().cloned())
+                                }?;
+
+                                if let Some(val) = value {
+                                    to_combine.push(val);
+                                }
+                            }
+                        }
+
+                        Some(&vec![Literal::String(to_combine.join(" "))])
                     }
                 };
 
@@ -171,6 +234,14 @@ where
                 }
                 _ => unimplemented!(),
             },
+            Mapping::Combines => match o {
+                SimpleTerm::BlankNode(bnode_id) => {
+                    let mut iris = Vec::new();
+                    collect_iris(&mut iris, &graph, bnode_id)?;
+                    Map::Combines(iris)
+                }
+                _ => unimplemented!(),
+            },
         };
 
         match s {
@@ -227,10 +298,10 @@ pub fn resolve_field_terms<'a>(
 
     for field_iri in fields {
         // get all the mapping referenced by the field
-        let mapping = match map.get(*field_iri) {
-            Some(mapping) => Ok(mapping),
-            None => Err(ResolveError::IriNotFound(field_iri.to_string())),
-        }?;
+        let Some(mapping) = map.get(*field_iri)
+        else {
+            continue;
+        };
 
         // because a field can be mapped to many other fields due to
         // it being present for different graphs we want to make sure to
@@ -240,11 +311,29 @@ pub fn resolve_field_terms<'a>(
                 Map::Same(mapping) => {
                     terms.insert(mapping.into_iri_term()?);
                 }
-                Map::Hash(_iri) => todo!(),
+                Map::Hash(mapping) => {
+                    terms.insert(mapping.into_iri_term()?);
+                }
                 Map::HashFirst(iris) => {
                     // rather than resolving all the fields in the HashFirst mapping
                     // we iterate over it here since we only want to support the :same
                     // operator otherwise the complexity will drive deeper than it needs to be
+                    for iri in iris {
+                        let mapping = match map.get(iri) {
+                            Some(mapping) => Ok(mapping),
+                            None => Err(ResolveError::IriNotFound(iri.to_string())),
+                        }?;
+
+                        for field_map in mapping {
+                            match field_map {
+                                Map::Same(mapping) => Ok(terms.insert(mapping.into_iri_term()?)),
+                                unsupported => Err(ResolveError::UnsupportedMapping(unsupported.clone())),
+                            }?;
+                        }
+                    }
+                }
+                Map::Combines(iris) => {
+                    // we have the same requirements here as HashFirst
                     for iri in iris {
                         let mapping = match map.get(iri) {
                             Some(mapping) => Ok(mapping),

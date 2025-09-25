@@ -26,15 +26,10 @@ pub struct Publication {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Publication>, TransformError> {
     use rdf::Publication::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        // "http://arga.org.au/schemas/maps/tsi/organisms",
-        // "http://arga.org.au/schemas/maps/tsi/collecting",
-        // "http://arga.org.au/schemas/maps/tsi/tissues",
-        // "http://arga.org.au/schemas/maps/tsi/registrations",
-        "http://arga.org.au/schemas/maps/tsi/extractions",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["extractions"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
 
     let data: HashMap<Literal, Vec<PublicationField>> = resolve_data(
         &graph,

@@ -55,15 +55,15 @@ pub struct Collecting {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Collecting>, Error> {
     use rdf::Collecting::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/collecting",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["collecting"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
 
     let data: HashMap<Literal, Vec<CollectingField>> = resolve_data(
         &graph,
         &[
+            EntityId,
             OrganismId,
             MaterialSampleId,
             FieldCollectingId,
@@ -99,22 +99,20 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Collecting>, Error> {
             ElevationAccuracy,
             Depth,
             DepthAccuracy,
+            CanonicalName,
+            ScientificNameAuthorship,
         ],
     )?;
 
 
     let mut records = Vec::new();
 
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
-        let mut record = Collecting {
-            entity_id,
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut record = Collecting::default();
 
         for field in fields {
             match field {
+                CollectingField::EntityId(val) => record.entity_id = val,
                 CollectingField::OrganismId(val) => record.organism_id = Some(val),
                 CollectingField::MaterialSampleId(val) => record.specimen_id = Some(val),
                 CollectingField::FieldCollectingId(val) => record.field_collecting_id = Some(val),
@@ -151,6 +149,9 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Collecting>, Error> {
                 CollectingField::ElevationAccuracy(val) => record.elevation_accuracy = Some(val),
                 CollectingField::Depth(val) => record.depth = Some(val),
                 CollectingField::DepthAccuracy(val) => record.depth_accuracy = Some(val),
+
+                CollectingField::CanonicalName(_) => {}
+                CollectingField::ScientificNameAuthorship(_) => {}
             }
         }
 
@@ -163,19 +164,37 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Collecting>, Error> {
 
 /// Get all scientific names.
 #[instrument(skip_all)]
-pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<Literal, String>, Error> {
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/collecting",
-    ];
-    let graph = dataset.graph(&graphs);
+pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
+    let iris = dataset.scope(&["collecting"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let mut names = HashMap::new();
 
-    let data: HashMap<Literal, Vec<CollectingField>> = resolve_data(&graph, &[rdf::Collecting::ScientificName])?;
-    for (entity_id, fields) in data.into_iter() {
-        if let Some(CollectingField::ScientificName(val)) = fields.into_iter().next() {
-            names.insert(entity_id, val);
+    let data: HashMap<Literal, Vec<CollectingField>> = resolve_data(
+        &graph,
+        &[
+            rdf::Collecting::EntityId,
+            rdf::Collecting::ScientificName,
+            rdf::Collecting::CanonicalName,
+            rdf::Collecting::ScientificNameAuthorship,
+        ],
+    )?;
+
+    for (_idx, fields) in data.into_iter() {
+        let mut entity_id = None;
+        let mut scientific_name = None;
+
+        for field in fields {
+            match field {
+                CollectingField::EntityId(val) => entity_id = Some(val),
+                CollectingField::ScientificName(val) => scientific_name = Some(val),
+                _ => {}
+            }
+        }
+
+        if let (Some(entity_id), Some(scientific_name)) = (entity_id, scientific_name) {
+            names.insert(entity_id, scientific_name);
         }
     }
 

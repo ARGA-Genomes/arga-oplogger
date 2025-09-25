@@ -1,0 +1,19 @@
+@base <http://arga.org.au/schemas/fields/>.
+
+@prefix :               <http://arga.org.au/schemas/mapping/>.
+@prefix model:      <http://arga.org.au/model/>.
+@prefix bpa:            <http://arga.org.au/schemas/maps/bpa/>.
+@prefix bpa_model:      <http://arga.org.au/schemas/maps/bpa/model/>.
+
+
+bpa_model:bpa_tsi :models bpa:names.
+model:bpa_tsi :models bpa:names.
+
+
+bpa:names
+{
+  <entity_id>                  :hash     <scientific_name>.
+  <canonical_name>             :same     bpa:scientific_name.
+  <scientific_name_authorship> :same     bpa:scientific_name_authorship.
+  <scientific_name>            :combines (<canonical_name> <scientific_name_authorship>).
+}

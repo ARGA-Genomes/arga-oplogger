@@ -26,6 +26,12 @@ pub enum Mapping {
     #[iri("mapping:same")]
     Same,
 
+    /// The subject is the combination of the object IRIs separated by a space.
+    /// If a value doesn't not exist it will be elided maintaining a single space
+    /// between all values referenced by the IRI.
+    #[iri("mapping:combines")]
+    Combines,
+
     /// The subject is the value of the object after it is
     /// hashed with the xxh3 algorithm to become a content derived hash.
     #[iri("mapping:hash")]
@@ -50,6 +56,7 @@ impl TryFrom<&SimpleTerm<'static>> for Mapping {
 #[derive(Debug, Clone)]
 pub enum Map {
     Same(iref::IriBuf),
+    Combines(Vec<iref::IriBuf>),
     Hash(iref::IriBuf),
     HashFirst(Vec<iref::IriBuf>),
 }
@@ -72,6 +79,40 @@ impl TryFrom<&SimpleTerm<'static>> for Rdfs {
     fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
         let mapping = try_from_term(&value)?;
         Ok(mapping)
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Name {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:canonical_name")]
+    CanonicalName,
+    #[iri("fields:scientific_name")]
+    ScientificName,
+    #[iri("fields:scientific_name_authorship")]
+    ScientificNameAuthorship,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum NameField {
+    EntityId(String),
+    CanonicalName(String),
+    ScientificName(String),
+    ScientificNameAuthorship(String),
+}
+
+impl From<(Name, Literal)> for NameField {
+    fn from(source: (Name, Literal)) -> Self {
+        match source {
+            (Name::EntityId, Literal::String(value)) => Self::EntityId(value),
+            (Name::CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
+            (Name::ScientificName, Literal::String(value)) => Self::ScientificName(value),
+            (Name::ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+        }
     }
 }
 
@@ -141,6 +182,8 @@ impl From<(Publication, Literal)> for PublicationField {
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Tissue {
+    #[iri("fields:entity_id")]
+    EntityId,
     #[iri("fields:organism_id")]
     OrganismId,
     #[iri("fields:tissue_id")]
@@ -192,6 +235,7 @@ pub enum Tissue {
 
 #[derive(Debug, Clone)]
 pub enum TissueField {
+    EntityId(String),
     OrganismId(String),
     TissueId(String),
     MaterialSampleId(String),
@@ -221,6 +265,7 @@ pub enum TissueField {
 impl From<(Tissue, Literal)> for TissueField {
     fn from(source: (Tissue, Literal)) -> Self {
         match source {
+            (Tissue::EntityId, Literal::String(value)) => Self::EntityId(value),
             (Tissue::OrganismId, Literal::String(value)) => Self::OrganismId(value),
             (Tissue::TissueId, Literal::String(value)) => Self::TissueId(value),
             (Tissue::MaterialSampleId, Literal::String(value)) => Self::MaterialSampleId(value),
@@ -252,6 +297,8 @@ impl From<(Tissue, Literal)> for TissueField {
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Collecting {
+    #[iri("fields:entity_id")]
+    EntityId,
     #[iri("fields:material_sample_id")]
     MaterialSampleId,
     #[iri("fields:scientific_name")]
@@ -329,11 +376,17 @@ pub enum Collecting {
     Depth,
     #[iri("fields:depth_accuracy")]
     DepthAccuracy,
+
+    #[iri("fields:canonical_name")]
+    CanonicalName,
+    #[iri("fields:scientific_name_authorship")]
+    ScientificNameAuthorship,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum CollectingField {
+    EntityId(String),
     OrganismId(String),
     MaterialSampleId(String),
     FieldCollectingId(String),
@@ -375,12 +428,16 @@ pub enum CollectingField {
     ElevationAccuracy(String),
     Depth(String),
     DepthAccuracy(String),
+
+    CanonicalName(String),
+    ScientificNameAuthorship(String),
 }
 
 
 impl From<(Collecting, Literal)> for CollectingField {
     fn from(source: (Collecting, Literal)) -> Self {
         match source {
+            (Collecting::EntityId, Literal::String(value)) => Self::EntityId(value),
             (Collecting::OrganismId, Literal::String(value)) => Self::OrganismId(value),
             (Collecting::MaterialSampleId, Literal::String(value)) => Self::MaterialSampleId(value),
             (Collecting::FieldCollectingId, Literal::String(value)) => Self::FieldCollectingId(value),
@@ -418,6 +475,9 @@ impl From<(Collecting, Literal)> for CollectingField {
             (Collecting::ElevationAccuracy, Literal::String(value)) => Self::ElevationAccuracy(value),
             (Collecting::Depth, Literal::String(value)) => Self::Depth(value),
             (Collecting::DepthAccuracy, Literal::String(value)) => Self::DepthAccuracy(value),
+
+            (Collecting::CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
+            (Collecting::ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
         }
     }
 }
@@ -426,6 +486,8 @@ impl From<(Collecting, Literal)> for CollectingField {
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Organism {
+    #[iri("fields:entity_id")]
+    EntityId,
     #[iri("fields:organism_id")]
     OrganismId,
     #[iri("fields:scientific_name")]
@@ -498,11 +560,16 @@ pub enum Organism {
 
     #[iri("fields:publication_entity_id")]
     PublicationEntityId,
+    #[iri("fields:canonical_name")]
+    CanonicalName,
+    #[iri("fields:scientific_name_authorship")]
+    ScientificNameAuthorship,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum OrganismField {
+    EntityId(String),
     OrganismId(String),
     ScientificName(String),
     Sex(String),
@@ -537,12 +604,15 @@ pub enum OrganismField {
     UpdatedAt(String),
 
     PublicationEntityId(String),
+    CanonicalName(String),
+    ScientificNameAuthorship(String),
 }
 
 
 impl From<(Organism, Literal)> for OrganismField {
     fn from(source: (Organism, Literal)) -> Self {
         match source {
+            (Organism::EntityId, Literal::String(value)) => Self::EntityId(value),
             (Organism::OrganismId, Literal::String(value)) => Self::OrganismId(value),
             (Organism::ScientificName, Literal::String(value)) => Self::ScientificName(value),
             (Organism::Sex, Literal::String(value)) => Self::Sex(value),
@@ -577,6 +647,8 @@ impl From<(Organism, Literal)> for OrganismField {
             (Organism::UpdatedAt, Literal::String(value)) => Self::UpdatedAt(value),
 
             (Organism::PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
+            (Organism::CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
+            (Organism::ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
         }
     }
 }
@@ -585,6 +657,12 @@ impl From<(Organism, Literal)> for OrganismField {
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Subsample {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:specimen_id")]
+    SpecimenId,
+    #[iri("fields:material_sample_id")]
+    MaterialSampleId,
     #[iri("fields:tissue_id")]
     TissueId,
     #[iri("fields:subsample_id")]
@@ -634,6 +712,9 @@ pub enum Subsample {
 
 #[derive(Debug, Clone)]
 pub enum SubsampleField {
+    EntityId(String),
+    SpecimenId(String),
+    MaterialSampleId(String),
     TissueId(String),
     SubsampleId(String),
     SampleType(String),
@@ -662,6 +743,9 @@ pub enum SubsampleField {
 impl From<(Subsample, Literal)> for SubsampleField {
     fn from(source: (Subsample, Literal)) -> Self {
         match source {
+            (Subsample::EntityId, Literal::String(value)) => Self::EntityId(value),
+            (Subsample::SpecimenId, Literal::String(value)) => Self::SpecimenId(value),
+            (Subsample::MaterialSampleId, Literal::String(value)) => Self::MaterialSampleId(value),
             (Subsample::TissueId, Literal::String(value)) => Self::TissueId(value),
             (Subsample::SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
             (Subsample::SampleType, Literal::String(value)) => Self::SampleType(value),
@@ -692,6 +776,8 @@ impl From<(Subsample, Literal)> for SubsampleField {
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Extraction {
+    #[iri("fields:entity_id")]
+    EntityId,
     #[iri("fields:subsample_id")]
     SubsampleId,
     #[iri("fields:extract_id")]
@@ -746,6 +832,7 @@ pub enum Extraction {
 
 #[derive(Debug, Clone)]
 pub enum ExtractionField {
+    EntityId(String),
     SubsampleId(String),
     ExtractId(String),
     ExtractedBy(String),
@@ -778,6 +865,7 @@ impl From<(Extraction, Literal)> for ExtractionField {
     fn from(source: (Extraction, Literal)) -> Self {
         use Extraction::*;
         match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
             (SubsampleId, Literal::String(value)) => Self::SubsampleId(value),
             (ExtractId, Literal::String(value)) => Self::ExtractId(value),
             (ExtractedBy, Literal::String(value)) => Self::ExtractedBy(value),
@@ -811,10 +899,14 @@ impl From<(Extraction, Literal)> for ExtractionField {
 #[derive(Debug, IriEnum)]
 #[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
 pub enum Library {
+    #[iri("fields:entity_id")]
+    EntityId,
     #[iri("fields:extract_id")]
     ExtractId,
     #[iri("fields:library_id")]
     LibraryId,
+    #[iri("fields:scientific_name")]
+    ScientificName,
 
     #[iri("fields:event_date")]
     EventDate,
@@ -862,13 +954,22 @@ pub enum Library {
     NumberOfLibrariesPooled,
     #[iri("fields:pcr_replicates")]
     PcrReplicates,
+
+    #[iri("fields:prepared_by_entity_id")]
+    PreparedByEntityId,
+    #[iri("fields:canonical_name")]
+    CanonicalName,
+    #[iri("fields:scientific_name_authorship")]
+    ScientificNameAuthorship,
 }
 
 
 #[derive(Debug, Clone)]
 pub enum LibraryField {
+    EntityId(String),
     ExtractId(String),
     LibraryId(String),
+    ScientificName(String),
     EventDate(String),
     Concentration(String),
     ConcentrationUnit(String),
@@ -892,6 +993,10 @@ pub enum LibraryField {
     DnaTreatment(String),
     NumberOfLibrariesPooled(String),
     PcrReplicates(String),
+
+    PreparedByEntityId(String),
+    CanonicalName(String),
+    ScientificNameAuthorship(String),
 }
 
 
@@ -899,8 +1004,10 @@ impl From<(Library, Literal)> for LibraryField {
     fn from(source: (Library, Literal)) -> Self {
         use Library::*;
         match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
             (ExtractId, Literal::String(value)) => Self::ExtractId(value),
             (LibraryId, Literal::String(value)) => Self::LibraryId(value),
+            (ScientificName, Literal::String(value)) => Self::ScientificName(value),
             (EventDate, Literal::String(value)) => Self::EventDate(value),
             (Concentration, Literal::String(value)) => Self::Concentration(value),
             (ConcentrationUnit, Literal::String(value)) => Self::ConcentrationUnit(value),
@@ -924,6 +1031,10 @@ impl From<(Library, Literal)> for LibraryField {
             (DnaTreatment, Literal::String(value)) => Self::DnaTreatment(value),
             (NumberOfLibrariesPooled, Literal::String(value)) => Self::NumberOfLibrariesPooled(value),
             (PcrReplicates, Literal::String(value)) => Self::PcrReplicates(value),
+
+            (PreparedByEntityId, Literal::String(value)) => Self::PreparedByEntityId(value),
+            (CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
+            (ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
         }
     }
 }

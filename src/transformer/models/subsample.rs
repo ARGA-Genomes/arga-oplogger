@@ -11,6 +11,8 @@ use crate::transformer::resolver::resolve_data;
 #[derive(Debug, Default, serde::Serialize)]
 pub struct Subsample {
     pub entity_id: String,
+    pub specimen_id: Option<String>,
+    pub material_sample_id: Option<String>,
     pub tissue_id: Option<String>,
     pub subsample_id: Option<String>,
 
@@ -42,15 +44,17 @@ pub struct Subsample {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
     use rdf::Subsample::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/subsamples",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["subsamples"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
 
     let data: HashMap<Literal, Vec<SubsampleField>> = resolve_data(
         &graph,
         &[
+            EntityId,
+            SpecimenId,
+            MaterialSampleId,
             TissueId,
             SubsampleId,
             SampleType,
@@ -79,16 +83,14 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
 
     let mut subsamples = Vec::new();
 
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
-        let mut subsample = Subsample {
-            entity_id,
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut subsample = Subsample::default();
 
         for field in fields {
             match field {
+                SubsampleField::EntityId(val) => subsample.entity_id = val,
+                SubsampleField::SpecimenId(val) => subsample.specimen_id = Some(val),
+                SubsampleField::MaterialSampleId(val) => subsample.material_sample_id = Some(val),
                 SubsampleField::TissueId(val) => subsample.tissue_id = Some(val),
                 SubsampleField::SubsampleId(val) => subsample.subsample_id = Some(val),
                 SubsampleField::SampleType(val) => subsample.sample_type = Some(val),
@@ -119,7 +121,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
 
     let names = get_scientific_names(dataset)?;
     for subsample in subsamples.iter_mut() {
-        if let Some(scientific_name) = names.get(&Literal::String(subsample.entity_id.clone())) {
+        if let Some(scientific_name) = names.get(&subsample.entity_id) {
             subsample.scientific_name = Some(scientific_name.clone());
         }
     }
@@ -133,25 +135,36 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
 /// This will go through all tissues and retrieve the name associated with the
 /// original collection event.
 #[instrument(skip_all)]
-pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<Literal, String>, Error> {
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/subsamples",
-    ];
-    let graph = dataset.graph(&graphs);
+pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
+    let iris = dataset.scope(&["subsamples"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let names = super::tissue::get_scientific_names(dataset)?;
-    let mut tissues = HashMap::new();
+    let mut subsamples = HashMap::new();
 
-    let data: HashMap<Literal, Vec<SubsampleField>> = resolve_data(&graph, &[rdf::Subsample::TissueId])?;
-    for (entity_id, fields) in data.into_iter() {
-        if let Some(SubsampleField::TissueId(tissue_id)) = fields.into_iter().next() {
-            if let Some(name) = names.get(&Literal::String(tissue_id)) {
-                tissues.insert(entity_id, name.clone());
+    let data: HashMap<Literal, Vec<SubsampleField>> =
+        resolve_data(&graph, &[rdf::Subsample::EntityId, rdf::Subsample::TissueId])?;
+
+    for (_idx, fields) in data.into_iter() {
+        let mut entity_id = None;
+        let mut tissue_id = None;
+
+        for field in fields {
+            match field {
+                SubsampleField::EntityId(val) => entity_id = Some(val),
+                SubsampleField::TissueId(val) => tissue_id = Some(val),
+                _ => {}
+            }
+        }
+
+        if let (Some(entity_id), Some(tissue_id)) = (entity_id, tissue_id) {
+            if let Some(name) = names.get(&tissue_id) {
+                subsamples.insert(entity_id, name.clone());
             }
         }
     }
 
 
-    Ok(tissues)
+    Ok(subsamples)
 }

@@ -1,6 +1,7 @@
 @base <http://arga.org.au/schemas/fields/>.
 
 @prefix :               <http://arga.org.au/schemas/mapping/>.
+@prefix model:      <http://arga.org.au/model/>.
 @prefix genbank:        <http://arga.org.au/schemas/maps/genbank/>.
 @prefix genbank_model:  <http://arga.org.au/schemas/maps/genbank/model/>.
 @prefix bpa:            <http://arga.org.au/schemas/maps/bpa/>.
@@ -8,6 +9,7 @@
 
 
 bpa_model:bpa_tsi :models bpa:library.
+model:bpa_tsi :models bpa:library.
 
 
 genbank:sequence_runs
@@ -28,6 +30,12 @@ bpa:library
   <extract_id>                 :same bpa:sample_id.
   # bioplatforms_library_id; bpa_library_id; library_id; bpa_library_ids
   <library_id>                 :same bpa:library_id.
+
+  # the scientific name in this dataset is actually the canonical name
+  # so we combine it with authorship to get the real scientific name
+  <canonical_name>             :same bpa:scientific_name.
+  <scientific_name_authorship> :same bpa:scientific_name_authorship.
+  <scientific_name>            :combines (<canonical_name> <scientific_name_authorship>).
 
   <event_date>                 :same bpa:library_prep_date.
   <concentration>              :same bpa:library_ng_ul.
@@ -56,4 +64,6 @@ bpa:library
   <dna_treatment>              :same bpa:DNA_treatment.
   <number_of_libraries_pooled> :same bpa:n_libraries_pooled.
   <pcr_replicates>             :same bpa:library_pcr_reps.
+
+  <prepared_by_entity_id>      :hash_first (<prepared_by>).
 }

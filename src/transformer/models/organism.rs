@@ -53,15 +53,15 @@ pub struct Organism {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Organism>, Error> {
     use rdf::Organism::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/organisms",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["organisms"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
 
     let data: HashMap<Literal, Vec<OrganismField>> = resolve_data(
         &graph,
         &[
+            EntityId,
             OrganismId,
             ScientificName,
             Sex,
@@ -93,22 +93,20 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Organism>, Error> {
             Doi,
             Citation,
             PublicationEntityId,
+            CanonicalName,
+            ScientificNameAuthorship,
         ],
     )?;
 
 
     let mut records = Vec::new();
 
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
-        let mut record = Organism {
-            entity_id,
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut record = Organism::default();
 
         for field in fields {
             match field {
+                OrganismField::EntityId(val) => record.entity_id = val,
                 OrganismField::OrganismId(val) => record.organism_id = Some(val),
                 OrganismField::ScientificName(val) => record.scientific_name = Some(val),
                 OrganismField::Sex(val) => record.sex = Some(val),
@@ -144,6 +142,8 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Organism>, Error> {
                 OrganismField::Citation(_) => {}
                 OrganismField::Curator(_) => {}
                 OrganismField::CuratorOrcid(_) => {}
+                OrganismField::CanonicalName(_) => {}
+                OrganismField::ScientificNameAuthorship(_) => {}
             }
         }
 

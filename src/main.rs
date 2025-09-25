@@ -127,6 +127,8 @@ pub enum UpdateCommand {
     Subsamples,
     /// Update extractions with the reduced logs
     Extractions,
+    /// Update extractions with the reduced logs
+    Libraries,
 }
 
 #[derive(clap::Subcommand)]
@@ -240,6 +242,7 @@ fn main() -> Result<(), Error> {
             UpdateCommand::Accessions => accessions::update()?,
             UpdateCommand::Subsamples => subsamples::update()?,
             UpdateCommand::Extractions => extractions::update()?,
+            UpdateCommand::Libraries => libraries::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

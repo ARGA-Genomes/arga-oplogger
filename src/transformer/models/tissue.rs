@@ -43,15 +43,14 @@ pub struct Tissue {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Tissue>, Error> {
     use rdf::Tissue::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/tissues",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["tissues"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let data: HashMap<Literal, Vec<TissueField>> = resolve_data(
         &graph,
         &[
+            EntityId,
             OrganismId,
             TissueId,
             MaterialSampleId,
@@ -81,16 +80,12 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Tissue>, Error> {
 
     let mut tissues = Vec::new();
 
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
-        let mut tissue = Tissue {
-            entity_id,
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut tissue = Tissue::default();
 
         for field in fields {
             match field {
+                TissueField::EntityId(val) => tissue.entity_id = val,
                 TissueField::OrganismId(val) => tissue.organism_id = Some(val),
                 TissueField::TissueId(val) => tissue.tissue_id = Some(val),
                 TissueField::MaterialSampleId(val) => tissue.material_sample_id = Some(val),
@@ -122,7 +117,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Tissue>, Error> {
 
     let names = get_scientific_names(dataset)?;
     for tissue in tissues.iter_mut() {
-        if let Some(scientific_name) = names.get(&Literal::String(tissue.entity_id.clone())) {
+        if let Some(scientific_name) = names.get(&tissue.entity_id) {
             tissue.scientific_name = Some(scientific_name.clone());
         }
     }
@@ -136,24 +131,35 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Tissue>, Error> {
 /// This will go through all material samples and retrieve the name associated with the
 /// original collection event.
 #[instrument(skip_all)]
-pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<Literal, String>, Error> {
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/tissues",
-    ];
-    let graph = dataset.graph(&graphs);
+pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
+    let iris = dataset.scope(&["tissues"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let names = super::collecting::get_scientific_names(dataset)?;
-    let mut collecting = HashMap::new();
+    let mut tissues = HashMap::new();
 
-    let data: HashMap<Literal, Vec<TissueField>> = resolve_data(&graph, &[rdf::Tissue::MaterialSampleId])?;
-    for (entity_id, fields) in data.into_iter() {
-        if let Some(TissueField::MaterialSampleId(material_sample_id)) = fields.into_iter().next() {
-            if let Some(name) = names.get(&Literal::String(material_sample_id)) {
-                collecting.insert(entity_id, name.clone());
+    let data: HashMap<Literal, Vec<TissueField>> =
+        resolve_data(&graph, &[rdf::Tissue::EntityId, rdf::Tissue::MaterialSampleId])?;
+
+    for (_idx, fields) in data.into_iter() {
+        let mut entity_id = None;
+        let mut material_sample_id = None;
+
+        for field in fields {
+            match field {
+                TissueField::EntityId(val) => entity_id = Some(val),
+                TissueField::MaterialSampleId(val) => material_sample_id = Some(val),
+                _ => {}
+            }
+        }
+
+        if let (Some(entity_id), Some(material_sample_id)) = (entity_id, material_sample_id) {
+            if let Some(name) = names.get(&material_sample_id) {
+                tissues.insert(entity_id, name.clone());
             }
         }
     }
 
-    Ok(collecting)
+    Ok(tissues)
 }

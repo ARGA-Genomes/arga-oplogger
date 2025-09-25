@@ -17,19 +17,14 @@ use crate::loggers::ProgressStream;
 use crate::readers::meta::Meta;
 
 
-pub mod prefix {
-    pub const NAMES: &'static str = "http://arga.org.au/schemas/fields/";
-    pub const MAPPING: &'static str = "http://arga.org.au/schemas/mapping/";
-}
-
-
 pub fn transform(path: &PathBuf) -> Result<(), Error> {
     let meta = meta(path)?;
 
     info!(mapping = meta.dataset.schema, "Creating triples database (TriG)");
-    let mut dataset = Dataset::new(&meta.dataset.schema);
+    let mut dataset = Dataset::new(&meta.dataset.schema)?;
 
     // load the mapping definitions
+    dataset.load_trig_path("rdf/names.ttl")?;
     dataset.load_trig_path("rdf/specimens.ttl")?;
     dataset.load_trig_path("rdf/subsamples.ttl")?;
     dataset.load_trig_path("rdf/extractions.ttl")?;
@@ -59,11 +54,6 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
 
     info!("CSV files loaded into TriG dataset");
     export(dataset)
-
-    // let graphs = vec!["http://arga.org.au/schemas/maps/tsi/subsamples"];
-    // let graph = dataset.graph(&graphs);
-    // dump_graph(&graph);
-    // Ok(())
 }
 
 
@@ -91,6 +81,7 @@ fn meta(path: &PathBuf) -> Result<Meta, Error> {
 fn export(dataset: Dataset) -> Result<(), Error> {
     info!("Exporting TriG dataset as importable CSV files");
 
+    export_names(&dataset)?;
     export_agents(&dataset)?;
     export_publications(&dataset)?;
 
@@ -106,10 +97,22 @@ fn export(dataset: Dataset) -> Result<(), Error> {
 
 
 #[tracing::instrument(skip_all)]
+fn export_names(dataset: &Dataset) -> Result<(), Error> {
+    let names = models::name::get_all(&dataset)?;
+
+    let mut writer = csv::Writer::from_path("out/names.csv")?;
+    for name in names {
+        writer.serialize(name)?;
+    }
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
 fn export_agents(dataset: &Dataset) -> Result<(), Error> {
     let agents = models::agent::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("agents.csv")?;
+    let mut writer = csv::Writer::from_path("out/agents.csv")?;
     for agent in agents {
         writer.serialize(agent)?;
     }
@@ -121,7 +124,7 @@ fn export_agents(dataset: &Dataset) -> Result<(), Error> {
 fn export_publications(dataset: &Dataset) -> Result<(), Error> {
     let publications = models::publications::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("publications.csv")?;
+    let mut writer = csv::Writer::from_path("out/publications.csv")?;
     for publication in publications {
         writer.serialize(publication)?;
     }
@@ -134,7 +137,7 @@ fn export_publications(dataset: &Dataset) -> Result<(), Error> {
 fn export_organisms(dataset: &Dataset) -> Result<(), Error> {
     let organisms = models::organism::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("organisms.csv")?;
+    let mut writer = csv::Writer::from_path("out/organisms.csv")?;
     for organism in organisms {
         writer.serialize(organism)?;
     }
@@ -146,7 +149,7 @@ fn export_organisms(dataset: &Dataset) -> Result<(), Error> {
 fn export_collections(dataset: &Dataset) -> Result<(), Error> {
     let collections = models::collecting::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("collections.csv")?;
+    let mut writer = csv::Writer::from_path("out/collections.csv")?;
     for collecting in collections {
         writer.serialize(collecting)?;
     }
@@ -158,7 +161,7 @@ fn export_collections(dataset: &Dataset) -> Result<(), Error> {
 fn export_tissues(dataset: &Dataset) -> Result<(), Error> {
     let tissues = models::tissue::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("tissues.csv")?;
+    let mut writer = csv::Writer::from_path("out/tissues.csv")?;
     for tissue in tissues {
         writer.serialize(tissue)?;
     }
@@ -170,7 +173,7 @@ fn export_tissues(dataset: &Dataset) -> Result<(), Error> {
 fn export_subsamples(dataset: &Dataset) -> Result<(), Error> {
     let subsamples = models::subsample::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("subsamples.csv")?;
+    let mut writer = csv::Writer::from_path("out/subsamples.csv")?;
     for subsample in subsamples {
         writer.serialize(subsample)?;
     }
@@ -182,7 +185,7 @@ fn export_subsamples(dataset: &Dataset) -> Result<(), Error> {
 fn export_extractions(dataset: &Dataset) -> Result<(), Error> {
     let extractions = models::extraction::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("extractions.csv")?;
+    let mut writer = csv::Writer::from_path("out/extractions.csv")?;
     for extraction in extractions {
         writer.serialize(extraction)?;
     }
@@ -194,7 +197,7 @@ fn export_extractions(dataset: &Dataset) -> Result<(), Error> {
 fn export_libraries(dataset: &Dataset) -> Result<(), Error> {
     let libraries = models::library::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("libraries.csv")?;
+    let mut writer = csv::Writer::from_path("out/libraries.csv")?;
     for library in libraries {
         writer.serialize(library)?;
     }

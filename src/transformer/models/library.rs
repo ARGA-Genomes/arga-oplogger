@@ -13,6 +13,7 @@ pub struct Library {
     pub entity_id: String,
     pub extract_id: Option<String>,
     pub library_id: Option<String>,
+    pub scientific_name: Option<String>,
 
     pub event_date: Option<String>,
     pub concentration: Option<String>,
@@ -44,18 +45,19 @@ pub struct Library {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
     use rdf::Library::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/bpa/",
-        "http://arga.org.au/schemas/maps/bpa/library",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["library"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
 
     info!("Resolving data");
     let data: HashMap<Literal, Vec<LibraryField>> = resolve_data(
         &graph,
         &[
+            EntityId,
             ExtractId,
             LibraryId,
+            ScientificName,
             EventDate,
             Concentration,
             // ConcentrationUnit,
@@ -79,30 +81,30 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
             DnaTreatment,
             NumberOfLibrariesPooled,
             PcrReplicates,
+            CanonicalName,
+            ScientificNameAuthorship,
+            PreparedByEntityId,
         ],
     )?;
 
 
     let mut libraries = Vec::new();
 
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
-        let mut library = Library {
-            entity_id,
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut library = Library::default();
 
         for field in fields {
             match field {
+                LibraryField::EntityId(val) => library.entity_id = val,
                 LibraryField::ExtractId(val) => library.extract_id = Some(val),
                 LibraryField::LibraryId(val) => library.library_id = Some(val),
+                LibraryField::ScientificName(val) => library.scientific_name = Some(val),
                 LibraryField::EventDate(val) => library.event_date = Some(val),
                 LibraryField::Concentration(val) => library.concentration = Some(val),
                 LibraryField::ConcentrationUnit(val) => library.concentration_unit = Some(val),
                 LibraryField::PcrCycles(val) => library.pcr_cycles = Some(val),
                 LibraryField::Layout(val) => library.layout = Some(val),
-                LibraryField::PreparedBy(val) => library.prepared_by = Some(val),
+                LibraryField::PreparedByEntityId(val) => library.prepared_by = Some(val),
                 LibraryField::Selection(val) => library.selection = Some(val),
                 LibraryField::BaitSetName(val) => library.bait_set_name = Some(val),
                 LibraryField::BaitSetReference(val) => library.bait_set_reference = Some(val),
@@ -120,6 +122,10 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
                 LibraryField::DnaTreatment(val) => library.dna_treatment = Some(val),
                 LibraryField::NumberOfLibrariesPooled(val) => library.number_of_libraries_pooled = Some(val),
                 LibraryField::PcrReplicates(val) => library.pcr_replicates = Some(val),
+
+                LibraryField::PreparedBy(_) => {}
+                LibraryField::CanonicalName(_) => {}
+                LibraryField::ScientificNameAuthorship(_) => {}
             }
         }
 

@@ -4,6 +4,7 @@ pub mod agents;
 pub mod collections;
 pub mod datasets;
 pub mod extractions;
+pub mod libraries;
 pub mod names;
 pub mod nomenclatural_acts;
 pub mod organisms;

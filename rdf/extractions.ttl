@@ -1,13 +1,19 @@
 @base <http://arga.org.au/schemas/fields/>.
 
 @prefix :           <http://arga.org.au/schemas/mapping/>.
+@prefix model:      <http://arga.org.au/model/>.
 @prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
-@prefix tsi_model:   <http://arga.org.au/schemas/maps/tsi/model/>.
+@prefix tsi_model:  <http://arga.org.au/schemas/maps/tsi/model/>.
+@prefix bpa:        <http://arga.org.au/schemas/maps/bpa/>.
+@prefix bpa_model:  <http://arga.org.au/schemas/maps/bpa/model/>.
 
 
 # The tsi dataset combines subsamples and extractions into one model
 # called lab_samples. We transpose a subset of that model into an extraction
 tsi_model:lab_samples :models tsi:extractions.
+
+bpa_model:bpa_tsi :models bpa:extractions.
+model:bpa_tsi :models bpa:extractions.
 
 
 tsi:extractions {
@@ -47,5 +53,38 @@ tsi:extractions {
   <extracted_by_entity_id>          :hash_first (<extracted_by_orcid> <extracted_by>).
   <material_extracted_by_entity_id> :hash_first (<material_extracted_by_orcid> <material_extracted_by>).
 
-  <publication_entity_id> :hash_first (<doi> <citation>).
+  <publication_entity_id>           :hash_first (<doi> <citation>).
+}
+
+
+bpa:extractions {
+  <entity_id> :hash bpa:sample_id.
+
+  <organism_id> :same bpa:sample_id.
+  <subsample_id> :same bpa:sample_id.
+
+  <extract_id> :same bpa:sample_id.
+
+  <extracted_by> :same bpa:dna_extracted_by.
+  # dna_extraction_date; genomic_material_preparation_date; material_extraction_date
+  <extraction_date> :same bpa:material_extraction_date.
+
+  # material_extraction_type; sample_material_preparation_type
+  <nucleic_acid_type> :same bpa:material_extraction_type.
+  <nucleic_acid_preservation_method> :same bpa:preservation_type.
+  # material_conc_ng_ul; dna_concentration
+  <nucleic_acid_concentration> :same bpa:material_conc_ng_ul.
+
+  # <concentration_unit> :same "ng/µl".
+  <absorbance_260_230_ratio>         :same bpa:absorbance_260_230_ratio.
+  <absorbance_260_280_ratio>         :same bpa:absorbance_260_280_ratio.
+  # material_extracted_by; dna_extracted_by; genomic_material_prepared_by
+  <material_extracted_by>            :same bpa:material_extracted_by.
+  # <action_extracted>                 :same "nucleic acid extracted".
+  # material_extraction_method; dna_extraction_method; extract_protocol; dna_extraction_protocol
+  <extraction_method>                :same bpa:material_extraction_method.
+
+
+  <extracted_by_entity_id>          :hash_first (<extracted_by>).
+  <material_extracted_by_entity_id> :hash_first (<material_extracted_by>).
 }

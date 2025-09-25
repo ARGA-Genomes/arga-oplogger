@@ -1,13 +1,19 @@
 @base <http://arga.org.au/schemas/fields/>.
 
 @prefix :           <http://arga.org.au/schemas/mapping/>.
+@prefix model:      <http://arga.org.au/model/>.
 @prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
-@prefix tsi_model:   <http://arga.org.au/schemas/maps/tsi/model/>.
+@prefix tsi_model:  <http://arga.org.au/schemas/maps/tsi/model/>.
+@prefix bpa:        <http://arga.org.au/schemas/maps/bpa/>.
+@prefix bpa_model:  <http://arga.org.au/schemas/maps/bpa/model/>.
 
 
 # The tsi dataset combines subsamples and extractions into one model
 # called lab_samples. We transpose a subset of that model into a subsample
 tsi_model:lab_samples :models tsi:subsamples.
+
+bpa_model:bpa_tsi :models bpa:subsamples.
+model:bpa_tsi :models bpa:subsamples.
 
 
 tsi:subsamples {
@@ -38,4 +44,30 @@ tsi:subsamples {
   <lab_host>                         :same tsi:lab_sample:lab_host.
   <sample_processing>                :same tsi:lab_sample:sample_processing.
   <sample_pooling>                   :same tsi:lab_sample:sample_pooling.
+}
+
+
+bpa:subsamples {
+  <entity_id> :hash bpa:sample_id.
+
+  # can be a subsample of a tissue or a collecting event itself. prioritise tissues.
+  <specimen_id> :hash_first (<tissue_id> <material_sample_id>).
+  <organism_id> :same bpa:sample_id.
+  <material_sample_id> :same bpa:sample_id.
+  <tissue_id> :same bpa:tissue_number.
+  # bioplatforms_sample_id; bpa_sample_id; sample_id
+  <subsample_id> :same bpa:sample_id.
+  <subsample_id> :same bpa:bpa_sample_id.
+
+  # tissue; tissue_type; dna_source; sample_type
+  <sample_type> :same bpa:sample_type.
+  <name> :same bpa:sample_name.
+  <custodian> :same bpa:sample_custodian.
+
+  <preservation_method> :same bpa:tissue_preservation.
+  <preservation_temperature> :same bpa:tissue_preservation_temperature.
+  <quality> :same bpa:sample_quality.
+
+  # sample; ncbi_biosample_accession; ncbi_biosample_accession_number
+  <biosample_accession> :same bpa:ncbi_biosample_accession.
 }

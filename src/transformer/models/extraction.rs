@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tracing::instrument;
+use tracing::{info, instrument};
 
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
@@ -37,15 +37,16 @@ pub struct Extraction {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
     use rdf::Extraction::*;
 
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/extractions",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["extractions"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
+
+    info!("Resolving data");
     let data: HashMap<Literal, Vec<ExtractionField>> = resolve_data(
         &graph,
         &[
+            EntityId,
             SubsampleId,
             ExtractId,
             ExtractionDate,
@@ -54,7 +55,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
             NucleicAcidPreservationMethod,
             NucleicAcidConcentration,
             NucleicAcidQuantification,
-            ConcentrationUnit,
+            // ConcentrationUnit,
             Absorbance260230Ratio,
             Absorbance260280Ratio,
             CellLysisMethod,
@@ -76,16 +77,12 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
 
     let mut extractions = Vec::new();
 
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
-        let mut extraction = Extraction {
-            entity_id,
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut extraction = Extraction::default();
 
         for field in fields {
             match field {
+                ExtractionField::EntityId(val) => extraction.entity_id = val,
                 ExtractionField::SubsampleId(val) => extraction.subsample_id = Some(val),
                 ExtractionField::ExtractId(val) => extraction.extract_id = Some(val),
                 ExtractionField::ExtractionDate(val) => extraction.extraction_date = Some(val),
@@ -122,9 +119,10 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
         extractions.push(extraction);
     }
 
+
     let names = get_scientific_names(dataset)?;
     for extraction in extractions.iter_mut() {
-        if let Some(scientific_name) = names.get(&Literal::String(extraction.entity_id.clone())) {
+        if let Some(scientific_name) = names.get(&extraction.entity_id) {
             extraction.scientific_name = Some(scientific_name.clone());
         }
     }
@@ -138,20 +136,31 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
 /// This will go through all subsamples and retrieve the name associated with the
 /// original collection event, going via tissues if necessary.
 #[instrument(skip_all)]
-pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<Literal, String>, Error> {
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/extractions",
-    ];
-    let graph = dataset.graph(&graphs);
+pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
+    let iris = dataset.scope(&["extractions"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let names = super::subsample::get_scientific_names(&dataset)?;
     let mut extractions = HashMap::new();
 
-    let subsamples: HashMap<Literal, Vec<ExtractionField>> = resolve_data(&graph, &[rdf::Extraction::SubsampleId])?;
-    for (entity_id, fields) in subsamples {
-        if let Some(ExtractionField::SubsampleId(subsample_id)) = fields.into_iter().next() {
-            if let Some(name) = names.get(&Literal::String(subsample_id)) {
+    let data: HashMap<Literal, Vec<ExtractionField>> =
+        resolve_data(&graph, &[rdf::Extraction::EntityId, rdf::Extraction::SubsampleId])?;
+
+    for (_idx, fields) in data.into_iter() {
+        let mut entity_id = None;
+        let mut subsample_id = None;
+
+        for field in fields {
+            match field {
+                ExtractionField::EntityId(val) => entity_id = Some(val),
+                ExtractionField::SubsampleId(val) => subsample_id = Some(val),
+                _ => {}
+            }
+        }
+
+        if let (Some(entity_id), Some(subsample_id)) = (entity_id, subsample_id) {
+            if let Some(name) = names.get(&subsample_id) {
                 extractions.insert(entity_id, name.clone());
             }
         }

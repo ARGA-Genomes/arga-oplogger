@@ -1,8 +1,10 @@
 @base <http://arga.org.au/schemas/fields/>.
 
 @prefix :           <http://arga.org.au/schemas/mapping/>.
+@prefix model:      <http://arga.org.au/model/>.
 @prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
 @prefix tsi_model:  <http://arga.org.au/schemas/maps/tsi/model/>.
+@prefix bpa:        <http://arga.org.au/schemas/maps/bpa/>.
 
 
 tsi_model:organisms     :models tsi:organisms.
@@ -10,6 +12,11 @@ tsi_model:livestate     :models tsi:organisms.
 tsi_model:collecting    :models tsi:collecting.
 tsi_model:tissues       :models tsi:tissues.
 tsi_model:registrations :models tsi:registrations.
+
+
+model:bpa_tsi :models bpa:organisms;
+              :models bpa:collecting;
+              :models bpa:tissues.
 
 
 tsi:organisms
@@ -194,3 +201,124 @@ tsi:registrations {
 
 # bnodes will clash with ones specified in graphs if converted into triples via a union graph
 # <publication_entity_id> :hash_first (<doi> <citation>).
+
+
+bpa:organisms
+{
+  <entity_id>              :hash bpa:sample_id.
+
+  <organism_id>            :same bpa:sample_id.
+
+  # the scientific name in this dataset is actually the canonical name
+  # so we combine it with authorship to get the real scientific name
+  <canonical_name>             :same bpa:scientific_name.
+  <scientific_name_authorship> :same bpa:scientific_name_authorship.
+  <scientific_name>            :combines (<canonical_name> <scientific_name_authorship>).
+
+  <sex>                    :same bpa:sex.
+  <genotypic_sex>          :same bpa:genotypic_sex.
+  <phenotypic_sex>         :same bpa:phenotypic_sex.
+  # life_stage; lifestage; dev_stage; plant_developmental_stage
+  <life_stage>             :same bpa:life_stage.
+  <live_state>             :same bpa:wild_captive.
+  <remarks>                :same bpa:ancillary_notes.
+
+  # identified_by; id_vetting_by
+  <identified_by>          :same bpa:identified_by.
+  <identification_date>    :same bpa:id_vetting_date.
+  <identification_remarks> :same bpa:scientific_name_note.
+  <identification_method>  :same bpa:identification_method.
+
+  <habitat>                :same bpa:habitat.
+
+  # <publication_entity_id> :hash_first (<doi> <citation>).
+}
+
+
+bpa:collecting {
+  <entity_id>          :hash bpa:sample_id.
+
+  <material_sample_id>  :same bpa:sample_id.
+  <organism_id>         :same bpa:sample_id.
+
+  # collector_sample_id; fieldid
+  <field_collecting_id> :same bpa:collector_sample_id.
+
+  # the scientific name in this dataset is actually the canonical name
+  # so we combine it with authorship to get the real scientific name
+  <canonical_name>             :same bpa:scientific_name.
+  <scientific_name_authorship> :same bpa:scientific_name_authorship.
+  <scientific_name>            :combines (<canonical_name> <scientific_name_authorship>).
+
+  # collection_date; living_collections_event_date
+  <event_date>             :same bpa:collection_date.
+  <event_time>             :same bpa:collection_time.
+
+  # collector; collected_by; collectors; voucher_herbarium_collector_id
+  <collected_by>           :same bpa:collector.
+  <remarks>                :same bpa:collection_note.
+  # identified_by; id_vetting_by
+  <identified_by>          :same bpa:identified_by.
+  <identification_date>    :same bpa:id_vetting_date.
+  <identification_remarks> :same bpa:scientific_name_note.
+  <identification_method>  :same bpa:identification_method.
+
+  # location_text; geo_loc_name; site; location_id; collection_location; sector; region
+  <locality>                 :same bpa:location_text.
+  <country>                  :same bpa:country.
+  # state_or_region; state_or_territory; province
+  <state_province>           :same bpa:state_or_region.
+  <latitude>                 :same bpa:decimal_latitude_public.
+  <latitude>                 :same bpa:latitude.
+  <longitude>                :same bpa:decimal_longitude_public.
+  <longitude>                :same bpa:longitude.
+  <location_generalisation>  :same bpa:location_generalisation.
+  <location_restricted>      :same bpa:location_info_restricted.
+  # altitude; elev
+  <elevation>                :same bpa:elev.
+  <depth>                    :same bpa:depth.
+  <depth_minimum>            :same bpa:depth_upper.
+  <depth_maximum>            :same bpa:depth_lower.
+  # location_notes; sample_site_location_description
+  <location_notes>           :same bpa:location_notes.
+
+  <environment_broad_scale>  :same bpa:env_broad_scale.
+  <environment_local_scale>  :same bpa:env_local_scale.
+  <environment_medium>       :same bpa:env_medium.
+  <habitat>                  :same bpa:habitat.
+  # host_scientific_name; specific_host; host_species_variety; original_source_host_species
+  <specific_host>            :same bpa:specific_host.
+  # isolate; strain_or_isolate; strain_description; serovar
+  <isolate>                  :same bpa:isolate.
+  # collection_permit; nagoya_protocol_permit_number,
+  <permit>                   :same bpa:collection_permit.
+  # collection_method; samp_mat_process
+  <sampling_protocol>        :same bpa:collection_method.
+}
+
+
+bpa:tissues {
+  <entity_id>               :hash bpa:tissue_number.
+
+  <organism_id>             :same bpa:sample_id.
+  <material_sample_id>      :same bpa:sample_id.
+  <tissue_id>               :same bpa:tissue_number.
+
+
+  <registered_by>           :same bpa:voucher_herbarium_recorded_by.
+  <registration_date>       :same bpa:voucher_herbarium_event_date.
+
+  <custodian>               :same bpa:specimen_custodian.
+  # specimen_id_description; institution_name; museumid; herbarium_code; sample_id_description
+  <institution>             :same bpa:institution_name.
+  <institution>             :same bpa:specimen_id_description.
+  <collection>              :same bpa:tissue_collection.
+  <collection_type>         :same bpa:sample_collection_type.
+
+  <status>                  :same bpa:type_status.
+  <tissue_type>             :same tsi:tissues:tissue_type.
+
+  <ala_url>                 :same bpa:ala_specimen_url.
+
+  <registered_by_entity_id> :hash bpa:voucher_herbarium_recorded_by.
+}

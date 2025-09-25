@@ -12,6 +12,9 @@ pub enum TransformError {
     #[error(transparent)]
     InvalidIri(#[from] iref::InvalidIri<String>),
 
+    #[error("Invalid IRI segment: {0}")]
+    InvalidSegment(String),
+
     #[error(transparent)]
     Parse(#[from] sophia::iri::InvalidIri),
 
@@ -39,4 +42,7 @@ pub enum ResolveError {
 
     #[error("Unsupported mapping {0:?}")]
     UnsupportedMapping(super::rdf::Map),
+
+    #[error("Ambiguous mapping for {0:?}. Found values: {1:?}")]
+    AmbiguousMapping(iref::IriBuf, Vec<super::rdf::Literal>),
 }

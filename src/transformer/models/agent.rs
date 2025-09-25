@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::errors::TransformError;
 use crate::transformer::dataset::Dataset;
-use crate::transformer::rdf::{Extraction, ExtractionField, Literal};
+use crate::transformer::rdf::{Extraction, ExtractionField, Library, LibraryField, Literal};
 use crate::transformer::resolver::resolve_data;
 
 
@@ -17,17 +17,16 @@ pub struct Agent {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
     let mut agents = get_extraction_agents(dataset)?;
     agents.extend(get_material_extraction_agents(dataset)?);
+    agents.extend(get_prepared_agents(dataset)?);
     agents.sort_by(|a, b| a.entity_id.cmp(&b.entity_id));
     agents.dedup();
     Ok(agents)
 }
 
 pub fn get_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/extractions",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["extractions"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let data: HashMap<Literal, Vec<ExtractionField>> = resolve_data(
         &graph,
@@ -39,11 +38,8 @@ pub fn get_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformE
     )?;
 
     let mut agents = Vec::new();
-    for (_entity_id, fields) in data {
-        let mut agent = Agent {
-            entity_id: "".to_string(),
-            ..Default::default()
-        };
+    for (_idx, fields) in data {
+        let mut agent = Agent::default();
 
         for field in fields {
             match field {
@@ -62,11 +58,9 @@ pub fn get_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformE
 
 
 pub fn get_material_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
-    let graphs = vec![
-        "http://arga.org.au/schemas/maps/tsi/",
-        "http://arga.org.au/schemas/maps/tsi/extractions",
-    ];
-    let graph = dataset.graph(&graphs);
+    let iris = dataset.scope(&["extractions"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
 
     let data: HashMap<Literal, Vec<ExtractionField>> = resolve_data(
         &graph,
@@ -78,9 +72,7 @@ pub fn get_material_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, T
     )?;
 
     let mut agents = Vec::new();
-    for (entity_id, fields) in data {
-        let Literal::String(entity_id) = entity_id;
-
+    for (_idx, fields) in data {
         let mut agent = Agent::default();
 
         for field in fields {
@@ -88,6 +80,33 @@ pub fn get_material_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, T
                 ExtractionField::MaterialExtractedBy(val) => agent.full_name = val,
                 ExtractionField::MaterialExtractedByOrcid(val) => agent.orcid = Some(val),
                 ExtractionField::MaterialExtractedByEntityId(val) => agent.entity_id = val,
+                _ => {}
+            }
+        }
+
+        agents.push(agent);
+    }
+
+    Ok(agents)
+}
+
+
+pub fn get_prepared_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
+    let iris = dataset.scope(&["library"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
+    let data: HashMap<Literal, Vec<LibraryField>> =
+        resolve_data(&graph, &[Library::PreparedBy, Library::PreparedByEntityId])?;
+
+    let mut agents = Vec::new();
+    for (_idx, fields) in data {
+        let mut agent = Agent::default();
+
+        for field in fields {
+            match field {
+                LibraryField::PreparedBy(val) => agent.full_name = val,
+                LibraryField::PreparedByEntityId(val) => agent.entity_id = val,
                 _ => {}
             }
         }
