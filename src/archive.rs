@@ -27,6 +27,7 @@ pub enum ImportType {
     Extractions,
     Libraries,
     Sequences,
+    Assemblies,
 
     AdminMedia,
 }
@@ -51,6 +52,7 @@ impl From<String> for ImportType {
             "extractions.csv.br" => Extractions,
             "libraries.csv.br" => Libraries,
             "sequences.csv.br" => Sequences,
+            "assemblies.csv.br" => Assemblies,
 
             "admin_media.csv.br" => AdminMedia,
             _ => Unknown,
@@ -120,7 +122,8 @@ impl Archive {
                 ImportType::Subsamples => loggers::subsamples::import_archive(stream, &meta.dataset)?,
                 ImportType::Extractions => loggers::extractions::import_archive(stream, &meta.dataset)?,
                 ImportType::Libraries => loggers::libraries::import_archive(stream, &meta.dataset)?,
-                ImportType::Sequences => todo!(),
+                ImportType::Sequences => loggers::sequence_runs::import_archive(stream, &meta.dataset)?,
+                ImportType::Assemblies => loggers::assemblies::import_archive(stream, &meta.dataset)?,
 
                 ImportType::AdminMedia => loggers::admin_media::import_archive(stream, &meta.dataset)?,
             }

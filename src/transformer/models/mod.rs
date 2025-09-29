@@ -1,9 +1,11 @@
 pub mod agent;
+pub mod assembly;
 pub mod collecting;
 pub mod extraction;
 pub mod library;
 pub mod name;
 pub mod organism;
 pub mod publications;
+pub mod sequencing_run;
 pub mod subsample;
 pub mod tissue;

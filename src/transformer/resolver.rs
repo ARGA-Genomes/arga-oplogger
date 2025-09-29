@@ -7,7 +7,17 @@ use tracing::{info, trace, warn};
 
 use crate::errors::{ResolveError, TransformError};
 use crate::transformer::dataset::PartialGraph;
-use crate::transformer::rdf::{IntoIriTerm, Literal, Map, Mapping, Rdfs, ToIriOwned, try_from_iri};
+use crate::transformer::rdf::{
+    Condition,
+    IntoIriTerm,
+    Literal,
+    Map,
+    Mapping,
+    MappingCondition,
+    Rdfs,
+    ToIriOwned,
+    try_from_iri,
+};
 
 
 pub type FieldMap = HashMap<iref::IriBuf, Vec<Map>>;
@@ -28,20 +38,27 @@ pub fn load_records(
     let terms = resolve_field_terms(&field_iris, &map)?;
     let terms = Vec::from_iter(terms);
 
+    let mut conditions: Vec<(&iref::Iri, &Condition)> = Vec::new();
+
     // the field names in the matched triples will be the specific source model field which means
     // we need to build a simple map to get the field type that it is mapped to
     let mut reverse_map: HashMap<iref::IriBuf, Vec<iref::IriBuf>> = HashMap::new();
-    for (key, value) in map.iter() {
-        for field in value {
+    for (key, maps) in map.iter() {
+        for field in maps {
             let iris = match field {
                 Map::Same(iri) => vec![iri.clone()],
                 Map::Combines(iris) => iris.clone(),
                 Map::Hash(iri) => vec![iri.clone()],
                 Map::HashFirst(iris) => iris.clone(),
+                Map::When(_iri, _condition) => vec![],
             };
 
             for mapped_from in iris {
                 reverse_map.entry(mapped_from).or_default().push(key.clone());
+            }
+
+            if let Map::When(iri, condition) = field {
+                conditions.push((iri.as_iri(), condition));
             }
         }
     }
@@ -79,6 +96,22 @@ pub fn load_records(
             record.entry(iri.clone()).or_default().push(value.clone());
         }
     }
+
+    let records = records
+        .into_iter()
+        .filter(|(_idx, record)| {
+            for (iri, cond) in &conditions {
+                if let Some(values) = record.get(*iri) {
+                    for value in values {
+                        if !cond.check(value) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            true
+        })
+        .collect();
 
     Ok(records)
 }
@@ -173,6 +206,10 @@ where
 
                         Some(&vec![Literal::String(to_combine.join(" "))])
                     }
+
+                    // ignore when conditions as records should already be
+                    // filtered out at this stage
+                    Map::When(_iri, _condition) => None,
                 };
 
 
@@ -239,6 +276,24 @@ where
                     let mut iris = Vec::new();
                     collect_iris(&mut iris, &graph, bnode_id)?;
                     Map::Combines(iris)
+                }
+                _ => unimplemented!(),
+            },
+
+            Mapping::When => match o {
+                SimpleTerm::Triple(triple) => {
+                    let [cond_s, cond_p, cond_o] = triple.spo();
+
+                    let subject = match cond_s {
+                        SimpleTerm::Iri(iri_ref) => iri_ref.to_iri_owned()?,
+                        _ => unimplemented!(),
+                    };
+
+                    let condition = match MappingCondition::try_from(cond_p)? {
+                        MappingCondition::Is => Condition::Is(Literal::try_from(cond_o)?),
+                    };
+
+                    Map::When(subject, condition)
                 }
                 _ => unimplemented!(),
             },
@@ -347,6 +402,9 @@ pub fn resolve_field_terms<'a>(
                             }?;
                         }
                     }
+                }
+                Map::When(iri, _condition) => {
+                    terms.insert(iri.into_iri_term()?);
                 }
             }
         }

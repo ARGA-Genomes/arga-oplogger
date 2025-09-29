@@ -4,11 +4,12 @@ use arga_core::{models, schema};
 use diesel::*;
 use serde::Deserialize;
 use tracing::info;
+use xxhash_rust::xxh3::xxh3_64;
 
+use crate::FrameProgress;
 use crate::database::PgPool;
 use crate::errors::Error;
 use crate::utils::new_progress_bar;
-use crate::FrameProgress;
 
 
 /// The CSV name record to import directly.
@@ -38,7 +39,11 @@ pub fn import(pool: PgPool, records: &[models::Name]) -> Result<(), Error> {
             .values(chunk)
             .on_conflict(scientific_name)
             .do_update()
-            .set((canonical_name.eq(excluded(canonical_name)), authorship.eq(excluded(authorship))))
+            .set((
+                canonical_name.eq(excluded(canonical_name)),
+                authorship.eq(excluded(authorship)),
+                entity_id.eq(excluded(entity_id)),
+            ))
             .execute(&mut conn)?;
 
         total_imported += inserted;
@@ -63,11 +68,14 @@ pub fn import_archive<S: Read + FrameProgress>(stream: S) -> Result<(), Error> {
         let record = row?;
         // bars.frames.inc(1);
 
+        let entity_id = xxh3_64(record.scientific_name.as_bytes());
+
         names.push(models::Name {
             id: uuid::Uuid::new_v4(),
             scientific_name: record.scientific_name,
             canonical_name: record.canonical_name,
             authorship: record.scientific_authorship,
+            entity_id: Some(entity_id as i64),
         })
     }
     bars.finish();

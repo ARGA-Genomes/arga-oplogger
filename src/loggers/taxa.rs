@@ -1,7 +1,7 @@
 use std::io::Read;
 
-use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
+use arga_core::crdt::lww::Map;
 use arga_core::models::{
     self,
     DatasetVersion,
@@ -20,24 +20,24 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::database::{
-    dataset_lookup,
-    get_pool,
-    name_lookup,
-    refresh_materialized_view,
-    taxon_lookup,
     FrameLoader,
     MaterializedView,
     PgPool,
     StringMap,
     UuidStringMap,
+    dataset_lookup,
+    get_pool,
+    name_lookup,
+    refresh_materialized_view,
+    taxon_lookup,
 };
 use crate::errors::{Error, LookupError, ReduceError};
 use crate::frames::IntoFrame;
 use crate::operations::group_operations;
-use crate::readers::{meta, OperationLoader};
+use crate::readers::{OperationLoader, meta};
 use crate::reducer::{DatabaseReducer, EntityPager, Reducer};
-use crate::utils::{taxonomic_rank_from_str, taxonomic_status_from_str, titleize_first_word, UpdateBars};
-use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
+use crate::utils::{UpdateBars, taxonomic_rank_from_str, taxonomic_status_from_str, titleize_first_word};
+use crate::{FrameProgress, frame_push_opt, import_compressed_csv_stream};
 
 type TaxonFrame = DataFrame<TaxonAtom>;
 
@@ -316,6 +316,7 @@ pub fn reduce_and_update(pool: PgPool, offset: i64, limit: i64) -> Result<(), Er
             scientific_name: record.scientific_name.clone(),
             canonical_name: record.canonical_name.clone(),
             authorship: record.scientific_name_authorship.clone(),
+            entity_id: None,
         });
 
         records.push(models::Taxon {

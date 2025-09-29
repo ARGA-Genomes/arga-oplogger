@@ -9,7 +9,9 @@
 
 
 bpa_model:bpa_tsi :models bpa:library.
-model:bpa_tsi :models bpa:library.
+model:bpa_tsi :models bpa:library;
+              :models bpa:sequencing_runs;
+              :models bpa:assembly.
 
 
 genbank:sequence_runs
@@ -66,4 +68,105 @@ bpa:library
   <pcr_replicates>             :same bpa:library_pcr_reps.
 
   <prepared_by_entity_id>      :hash_first (<prepared_by>).
+}
+
+
+bpa:sequencing_runs {
+  # bioplatforms_dataset_id; bpa_dataset_id; dataset_id; bpa_dataset_ids; ddrad_dataset_ids; exon_capture_dataset_ids; genome_dataset_ids
+  <entity_id> :hash bpa:bioplatforms_dataset_id;
+              :hash bpa:dataset_id.
+
+  # bioplatforms_library_id; bpa_library_id; library_id; bpa_library_ids
+  <library_id>  :same bpa:library_id.
+  <sequence_id> :same bpa:bioplatforms_dataset_id;
+                :same bpa:dataset_id.
+
+  # sequencing_facility; omics_facility; facility; sequence_run_site
+  <facility> :same bpa:sequencing_facility.
+  <event_date> :same bpa:run_date.
+
+  # sequencing_model; sequencer; sequencing_technology; analytical_platform
+  <instrument_or_method> :same bpa:sequencing_model;
+                         :same bpa:sequencing_technology.
+  <sra_run_accession> :same bpa:run_ref.
+  # sequencing_platform; Sequence Data Type; seq_technology; data_type; sequence_data_type
+  <platform> :same bpa:sequencing_platform;
+             :same bpa:data_type;
+             :same bpa:sequence_data_type.
+
+  <dataset_file_format> :same bpa:file_type.
+  <kit_chemistry> :same bpa:sequencing_kit_chemistry_version.
+  <flowcell_type> :same bpa:flowcell_type.
+  <cell_movie_length> :same bpa:movie_length.
+  <base_caller_model> :same bpa:model_base_caller.
+  <fast5_compression> :same bpa:fast5_compression.
+
+  # analysis_software; analysissoftwareversion; conversion_software
+  <analysis_software> :same bpa:analysis_software.
+  # analysis_software_version; software_version; nanopore_software_version
+  <analysis_software_version> :same bpa:analysis_software_version.
+  <target_gene> :same bpa:amplicon.
+}
+
+bpa:sequencing_run_files {
+  <entity_id>   :hash <checksum>.
+
+  <sequence_id> :hash bpa:bioplatforms_dataset_id;
+                :hash bpa:dataset_id.
+
+  <name>                :json_path bpa:resources.name.
+  <format>              :json_path bpa:resources.format.
+  <checksum>            :json_path bpa:resources.md5.
+  <size>                :json_path bpa:resources.size.
+  <lane_number>         :json_path bpa:resources.lane.
+  <read_number>         :json_path bpa:resources.read.
+  <read_file_index_tag> :json_path bpa:resources.index.
+
+  # resources.flowcell_id; resources.flow_cell_id
+  <flowcell_number> :json_path bpa:resources.flowcell_id;
+                    :json_path bpa:resources.flow_cell_id.
+}
+
+
+bpa:assembly {
+  # <entity_id> :hash bpa:dataset_id ~ :when {| <type> :same "Genome Assembly" |}.
+  <entity_id>  :hash bpa:dataset_id;
+               :when << <type> :is "Genome Assembly" >>.
+
+  # bioplatforms_library_id; bpa_library_id; library_id; bpa_library_ids
+  <library_id>  :same bpa:library_id.
+  <assembly_id>  :hash bpa:dataset_id.
+
+  # the scientific name in this dataset is actually the canonical name
+  # so we combine it with authorship to get the real scientific name
+  <canonical_name>             :same bpa:scientific_name.
+  <scientific_name_authorship> :same bpa:scientific_name_authorship.
+  <scientific_name>            :combines (<canonical_name> <scientific_name_authorship>).
+
+  <event_date> :same bpa:assembly_date.
+  <name>       :same bpa:assembly_name.
+  # assembly_type, data_type
+  <type>       :same bpa:data_type.
+  # assembly_method; other_assembly_method
+  <method>                :same bpa:assembly_method.
+  # assembly_method_version; assembly_method_version_or_date
+  <method_version>        :same bpa:assembly_method_version.
+  <method_link>           :same bpa:version_release_link.
+  <size>                  :same bpa:genome_size.
+  <minimum_gap_length>    :same bpa:min_gap_length.
+  <completeness>          :same bpa:completion_score.
+  <completeness_method>   :same bpa:completion_score_method.
+  <source_molecule>       :same bpa:molecule_type.
+  <reference_genome_used> :same bpa:reference_genome.
+  <reference_genome_link> :same bpa:reference_genome_link.
+  # n_scaffolds; no_scaffolds
+  <number_of_scaffolds>             :same bpa:n_scaffolds.
+  <genome_coverage>                 :same bpa:genome_coverage.
+  <hybrid>                          :same bpa:hybrid.
+  <hybrid_information>              :same bpa:hybrid_details.
+  <polishing_or_scaffolding_method> :same bpa:polishing_scaffolding_method.
+  <polishing_or_scaffolding_data>   :same bpa:polishing_scaffolding_data.
+  <computational_infrastructure>    :same bpa:computational_infrastructure.
+  <system_used>                     :same bpa:system_used.
+  <assembly_n50>                    :same bpa:n50.
 }

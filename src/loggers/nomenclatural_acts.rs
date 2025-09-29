@@ -1,8 +1,8 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use arga_core::crdt::lww::Map;
 use arga_core::crdt::DataFrame;
+use arga_core::crdt::lww::Map;
 use arga_core::models::{self, DatasetVersion, NomenclaturalActAtom, NomenclaturalActOperation, NomenclaturalActType};
 use arga_core::schema;
 use diesel::*;
@@ -11,13 +11,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::database::{get_pool, name_lookup, publication_lookup, FrameLoader, PgPool};
+use crate::database::{FrameLoader, PgPool, get_pool, name_lookup, publication_lookup};
 use crate::errors::Error;
 use crate::frames::{FrameReader, IntoFrame};
 use crate::operations::group_operations;
-use crate::readers::{meta, OperationLoader};
+use crate::readers::{OperationLoader, meta};
 use crate::utils::{new_progress_bar, new_spinner, nomenclatural_act_from_str};
-use crate::{frame_push_opt, import_compressed_csv_stream, import_frames_from_stream, FrameProgress};
+use crate::{FrameProgress, frame_push_opt, import_compressed_csv_stream, import_frames_from_stream};
 
 type NomenclaturalActFrame = DataFrame<NomenclaturalActAtom>;
 
@@ -283,6 +283,7 @@ impl NomenclaturalActs {
                 scientific_name: record.scientific_name.clone(),
                 canonical_name: record.canonical_name.clone(),
                 authorship: record.scientific_name_authorship.clone(),
+                entity_id: None,
             });
         }
         names.sort_by(|a, b| a.scientific_name.cmp(&b.scientific_name));

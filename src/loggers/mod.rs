@@ -1,6 +1,7 @@
 pub mod accessions;
 pub mod admin_media;
 pub mod agents;
+pub mod assemblies;
 pub mod collections;
 pub mod datasets;
 pub mod extractions;
@@ -9,6 +10,7 @@ pub mod names;
 pub mod nomenclatural_acts;
 pub mod organisms;
 pub mod publications;
+pub mod sequence_runs;
 pub mod sequences;
 pub mod sources;
 pub mod subsamples;

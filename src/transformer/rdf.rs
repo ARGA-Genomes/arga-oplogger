@@ -6,6 +6,20 @@ use sophia::api::term::{SimpleTerm, Term};
 use crate::errors::TransformError;
 
 
+#[derive(Debug, IriEnum)]
+#[iri_prefix("type" = "http://www.w3.org/2001/XMLSchema#")]
+pub enum DataTypes {
+    #[iri("type:string")]
+    String,
+    #[iri("type:boolean")]
+    Boolean,
+    #[iri("type:decimal")]
+    Decimal,
+    #[iri("type:integer")]
+    Integer,
+}
+
+
 #[derive(Debug, Clone)]
 pub enum Value {
     Iri(String),
@@ -15,6 +29,22 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     String(String),
+}
+
+impl TryFrom<&SimpleTerm<'static>> for Literal {
+    type Error = TransformError;
+
+    fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
+        match value {
+            SimpleTerm::LiteralDatatype(val, type_iri) => match try_from_iri(type_iri)? {
+                DataTypes::String => Ok(Literal::String(val.to_string())),
+                DataTypes::Boolean => todo!(),
+                DataTypes::Decimal => todo!(),
+                DataTypes::Integer => todo!(),
+            },
+            _ => Err(TransformError::MissingEntityId),
+        }
+    }
 }
 
 
@@ -41,9 +71,29 @@ pub enum Mapping {
     /// that has a value after it is hashed to become a content derived hash.
     #[iri("mapping:hash_first")]
     HashFirst,
+
+    #[iri("mapping:when")]
+    When,
 }
 
 impl TryFrom<&SimpleTerm<'static>> for Mapping {
+    type Error = TransformError;
+
+    fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
+        let mapping = try_from_term(&value)?;
+        Ok(mapping)
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("mapping" = "http://arga.org.au/schemas/mapping/")]
+pub enum MappingCondition {
+    #[iri("mapping:is")]
+    Is,
+}
+
+impl TryFrom<&SimpleTerm<'static>> for MappingCondition {
     type Error = TransformError;
 
     fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
@@ -59,6 +109,21 @@ pub enum Map {
     Combines(Vec<iref::IriBuf>),
     Hash(iref::IriBuf),
     HashFirst(Vec<iref::IriBuf>),
+    When(iref::IriBuf, Condition),
+}
+
+
+#[derive(Debug, Clone)]
+pub enum Condition {
+    Is(Literal),
+}
+
+impl Condition {
+    pub fn check(&self, value: &Literal) -> bool {
+        match self {
+            Condition::Is(literal) => value.eq(literal),
+        }
+    }
 }
 
 
@@ -1033,6 +1098,227 @@ impl From<(Library, Literal)> for LibraryField {
             (PcrReplicates, Literal::String(value)) => Self::PcrReplicates(value),
 
             (PreparedByEntityId, Literal::String(value)) => Self::PreparedByEntityId(value),
+            (CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
+            (ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+        }
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum SequencingRun {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:library_id")]
+    LibraryId,
+    #[iri("fields:sequence_id")]
+    SequenceId,
+    #[iri("fields:facility")]
+    Facility,
+    #[iri("fields:event_date")]
+    EventDate,
+    #[iri("fields:instrument_or_method")]
+    InstrumentOrMethod,
+    #[iri("fields:sra_run_accession")]
+    SraRunAccession,
+    #[iri("fields:platform")]
+    Platform,
+    #[iri("fields:dataset_file_format")]
+    DatasetFileFormat,
+    #[iri("fields:kit_chemistry")]
+    KitChemistry,
+    #[iri("fields:flowcell_type")]
+    FlowcellType,
+    #[iri("fields:cell_movie_length")]
+    CellMovieLength,
+    #[iri("fields:base_caller_model")]
+    BaseCallerModel,
+    #[iri("fields:fast5_compression")]
+    Fast5Compression,
+    #[iri("fields:analysis_software")]
+    AnalysisSoftware,
+    #[iri("fields:analysis_software_version")]
+    AnalysisSoftwareVersion,
+    #[iri("fields:target_gene")]
+    TargetGene,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum SequencingRunField {
+    EntityId(String),
+    LibraryId(String),
+    SequenceId(String),
+    Facility(String),
+    EventDate(String),
+    InstrumentOrMethod(String),
+    SraRunAccession(String),
+    Platform(String),
+    DatasetFileFormat(String),
+    KitChemistry(String),
+    FlowcellType(String),
+    CellMovieLength(String),
+    BaseCallerModel(String),
+    Fast5Compression(String),
+    AnalysisSoftware(String),
+    AnalysisSoftwareVersion(String),
+    TargetGene(String),
+}
+
+
+impl From<(SequencingRun, Literal)> for SequencingRunField {
+    fn from(source: (SequencingRun, Literal)) -> Self {
+        use SequencingRun::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (LibraryId, Literal::String(value)) => Self::LibraryId(value),
+            (SequenceId, Literal::String(value)) => Self::SequenceId(value),
+            (Facility, Literal::String(value)) => Self::Facility(value),
+            (EventDate, Literal::String(value)) => Self::EventDate(value),
+            (InstrumentOrMethod, Literal::String(value)) => Self::InstrumentOrMethod(value),
+            (SraRunAccession, Literal::String(value)) => Self::SraRunAccession(value),
+            (Platform, Literal::String(value)) => Self::Platform(value),
+            (DatasetFileFormat, Literal::String(value)) => Self::DatasetFileFormat(value),
+            (KitChemistry, Literal::String(value)) => Self::KitChemistry(value),
+            (FlowcellType, Literal::String(value)) => Self::FlowcellType(value),
+            (CellMovieLength, Literal::String(value)) => Self::CellMovieLength(value),
+            (BaseCallerModel, Literal::String(value)) => Self::BaseCallerModel(value),
+            (Fast5Compression, Literal::String(value)) => Self::Fast5Compression(value),
+            (AnalysisSoftware, Literal::String(value)) => Self::AnalysisSoftware(value),
+            (AnalysisSoftwareVersion, Literal::String(value)) => Self::AnalysisSoftwareVersion(value),
+            (TargetGene, Literal::String(value)) => Self::TargetGene(value),
+        }
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Assembly {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:library_id")]
+    LibraryId,
+    #[iri("fields:assembly_id")]
+    AssemblyId,
+    #[iri("fields:scientific_name")]
+    ScientificName,
+    #[iri("fields:event_date")]
+    EventDate,
+    #[iri("fields:name")]
+    Name,
+    #[iri("fields:type")]
+    Type,
+    #[iri("fields:method")]
+    Method,
+    #[iri("fields:method_version")]
+    MethodVersion,
+    #[iri("fields:method_link")]
+    MethodLink,
+    #[iri("fields:size")]
+    Size,
+    #[iri("fields:minimum_gap_length")]
+    MinimumGapLength,
+    #[iri("fields:completeness")]
+    Completeness,
+    #[iri("fields:completeness_method")]
+    CompletenessMethod,
+    #[iri("fields:source_molecule")]
+    SourceMolecule,
+    #[iri("fields:reference_genome_used")]
+    ReferenceGenomeUsed,
+    #[iri("fields:reference_genome_link")]
+    ReferenceGenomeLink,
+    #[iri("fields:number_of_scaffolds")]
+    NumberOfScaffolds,
+    #[iri("fields:genome_coverage")]
+    GenomeCoverage,
+    #[iri("fields:hybrid")]
+    Hybrid,
+    #[iri("fields:hybrid_information")]
+    HybridInformation,
+    #[iri("fields:polishing_or_scaffolding_method")]
+    PolishingOrScaffoldingMethod,
+    #[iri("fields:polishing_or_scaffolding_data")]
+    PolishingOrScaffoldingData,
+    #[iri("fields:computational_infrastructure")]
+    ComputationalInfrastructure,
+    #[iri("fields:system_used")]
+    SystemUsed,
+    #[iri("fields:assembly_n50")]
+    AssemblyN50,
+
+    #[iri("fields:canonical_name")]
+    CanonicalName,
+    #[iri("fields:scientific_name_authorship")]
+    ScientificNameAuthorship,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum AssemblyField {
+    EntityId(String),
+    LibraryId(String),
+    AssemblyId(String),
+    ScientificName(String),
+    EventDate(String),
+    Name(String),
+    Type(String),
+    Method(String),
+    MethodVersion(String),
+    MethodLink(String),
+    Size(String),
+    MinimumGapLength(String),
+    Completeness(String),
+    CompletenessMethod(String),
+    SourceMolecule(String),
+    ReferenceGenomeUsed(String),
+    ReferenceGenomeLink(String),
+    NumberOfScaffolds(String),
+    GenomeCoverage(String),
+    Hybrid(String),
+    HybridInformation(String),
+    PolishingOrScaffoldingMethod(String),
+    PolishingOrScaffoldingData(String),
+    ComputationalInfrastructure(String),
+    SystemUsed(String),
+    AssemblyN50(String),
+    CanonicalName(String),
+    ScientificNameAuthorship(String),
+}
+
+
+impl From<(Assembly, Literal)> for AssemblyField {
+    fn from(source: (Assembly, Literal)) -> Self {
+        use Assembly::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (LibraryId, Literal::String(value)) => Self::LibraryId(value),
+            (AssemblyId, Literal::String(value)) => Self::AssemblyId(value),
+            (ScientificName, Literal::String(value)) => Self::ScientificName(value),
+            (EventDate, Literal::String(value)) => Self::EventDate(value),
+            (Name, Literal::String(value)) => Self::Name(value),
+            (Type, Literal::String(value)) => Self::Type(value),
+            (Method, Literal::String(value)) => Self::Method(value),
+            (MethodVersion, Literal::String(value)) => Self::MethodVersion(value),
+            (MethodLink, Literal::String(value)) => Self::MethodLink(value),
+            (Size, Literal::String(value)) => Self::Size(value),
+            (MinimumGapLength, Literal::String(value)) => Self::MinimumGapLength(value),
+            (Completeness, Literal::String(value)) => Self::Completeness(value),
+            (CompletenessMethod, Literal::String(value)) => Self::CompletenessMethod(value),
+            (SourceMolecule, Literal::String(value)) => Self::SourceMolecule(value),
+            (ReferenceGenomeUsed, Literal::String(value)) => Self::ReferenceGenomeUsed(value),
+            (ReferenceGenomeLink, Literal::String(value)) => Self::ReferenceGenomeLink(value),
+            (NumberOfScaffolds, Literal::String(value)) => Self::NumberOfScaffolds(value),
+            (GenomeCoverage, Literal::String(value)) => Self::GenomeCoverage(value),
+            (Hybrid, Literal::String(value)) => Self::Hybrid(value),
+            (HybridInformation, Literal::String(value)) => Self::HybridInformation(value),
+            (PolishingOrScaffoldingMethod, Literal::String(value)) => Self::PolishingOrScaffoldingMethod(value),
+            (PolishingOrScaffoldingData, Literal::String(value)) => Self::PolishingOrScaffoldingData(value),
+            (ComputationalInfrastructure, Literal::String(value)) => Self::ComputationalInfrastructure(value),
+            (SystemUsed, Literal::String(value)) => Self::SystemUsed(value),
+            (AssemblyN50, Literal::String(value)) => Self::AssemblyN50(value),
             (CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
         }

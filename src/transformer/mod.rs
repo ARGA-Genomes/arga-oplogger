@@ -91,6 +91,8 @@ fn export(dataset: Dataset) -> Result<(), Error> {
     export_subsamples(&dataset)?;
     export_extractions(&dataset)?;
     export_libraries(&dataset)?;
+    export_sequencing_runs(&dataset)?;
+    export_assemblies(&dataset)?;
 
     Ok(())
 }
@@ -200,6 +202,30 @@ fn export_libraries(dataset: &Dataset) -> Result<(), Error> {
     let mut writer = csv::Writer::from_path("out/libraries.csv")?;
     for library in libraries {
         writer.serialize(library)?;
+    }
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+fn export_sequencing_runs(dataset: &Dataset) -> Result<(), Error> {
+    let sequences = models::sequencing_run::get_all(&dataset)?;
+
+    let mut writer = csv::Writer::from_path("out/sequences.csv")?;
+    for sequence in sequences {
+        writer.serialize(sequence)?;
+    }
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+fn export_assemblies(dataset: &Dataset) -> Result<(), Error> {
+    let assemblies = models::assembly::get_all(&dataset)?;
+
+    let mut writer = csv::Writer::from_path("out/assemblies.csv")?;
+    for assembly in assemblies {
+        writer.serialize(assembly)?;
     }
 
     Ok(())

@@ -134,3 +134,43 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
 
     Ok(libraries)
 }
+
+
+/// Get all scientific names.
+#[instrument(skip_all)]
+pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
+    let iris = dataset.scope(&["library"]);
+    let iris = iris.iter().map(|i| i.as_str()).collect();
+    let graph = dataset.graph(&iris);
+
+    let mut names = HashMap::new();
+
+    let data: HashMap<Literal, Vec<LibraryField>> = resolve_data(
+        &graph,
+        &[
+            rdf::Library::EntityId,
+            rdf::Library::ScientificName,
+            rdf::Library::CanonicalName,
+            rdf::Library::ScientificNameAuthorship,
+        ],
+    )?;
+
+    for (_idx, fields) in data.into_iter() {
+        let mut entity_id = None;
+        let mut scientific_name = None;
+
+        for field in fields {
+            match field {
+                LibraryField::EntityId(val) => entity_id = Some(val),
+                LibraryField::ScientificName(val) => scientific_name = Some(val),
+                _ => {}
+            }
+        }
+
+        if let (Some(entity_id), Some(scientific_name)) = (entity_id, scientific_name) {
+            names.insert(entity_id, scientific_name);
+        }
+    }
+
+    Ok(names)
+}
