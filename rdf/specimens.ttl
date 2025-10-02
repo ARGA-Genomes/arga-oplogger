@@ -5,6 +5,7 @@
 @prefix tsi:        <http://arga.org.au/schemas/maps/tsi/>.
 @prefix tsi_model:  <http://arga.org.au/schemas/maps/tsi/model/>.
 @prefix bpa:        <http://arga.org.au/schemas/maps/bpa/>.
+@prefix ncbi:       <http://arga.org.au/schemas/maps/ncbi/>.
 
 
 tsi_model:organisms     :models tsi:organisms.
@@ -17,6 +18,38 @@ tsi_model:registrations :models tsi:registrations.
 model:bpa_tsi :models bpa:organisms;
               :models bpa:collecting;
               :models bpa:tissues.
+
+
+ncbi:organisms
+{
+  <entity_id>              :hash ncbi:record_id.
+  <organism_id>            :same ncbi:record_id.
+  <scientific_name>        :same ncbi:scientific_name.
+  <sex>                    :same ncbi:sex.
+  <life_stage>             :same ncbi:life_stage.
+}
+
+
+ncbi:collecting {
+  <entity_id>          :hash ncbi:record_id.
+  <material_sample_id> :same ncbi:record_id.
+
+  <organism_id>         :same ncbi:record_id.
+  <scientific_name>     :same ncbi:scientific_name.
+
+  <event_date>             :same ncbi:event_date.
+  <collected_by>           :same ncbi:collected_by.
+
+  <locality>                 :same ncbi:locality.
+  <latitude>                 :same ncbi:latitude.
+  <longitude>                :same ncbi:longitude.
+
+  <environment_broad_scale>  :same ncbi:env_broad_scale.
+  <specific_host>            :same ncbi:specific_host.
+  <strain>                   :same ncbi:strain.
+  <isolate>                  :same ncbi:isolate.
+}
+
 
 
 tsi:organisms

@@ -6,6 +6,7 @@
 @prefix tsi_model:  <http://arga.org.au/schemas/maps/tsi/model/>.
 @prefix bpa:        <http://arga.org.au/schemas/maps/bpa/>.
 @prefix bpa_model:  <http://arga.org.au/schemas/maps/bpa/model/>.
+@prefix ncbi:       <http://arga.org.au/schemas/maps/ncbi/>.
 
 
 # The tsi dataset combines subsamples and extractions into one model
@@ -14,6 +15,14 @@ tsi_model:lab_samples :models tsi:extractions.
 
 bpa_model:bpa_tsi :models bpa:extractions.
 model:bpa_tsi :models bpa:extractions.
+
+
+ncbi:extractions {
+  <entity_id>         :hash ncbi:record_id.
+  <subsample_id>      :same bpa:record_id.
+  <extract_id>        :same bpa:sample_id.
+  <nucleic_acid_type> :same bpa:measurement_method.
+}
 
 
 tsi:extractions {

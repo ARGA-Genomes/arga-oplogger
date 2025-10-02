@@ -2,7 +2,7 @@
 
 @prefix :               <http://arga.org.au/schemas/mapping/>.
 @prefix model:      <http://arga.org.au/model/>.
-@prefix genbank:        <http://arga.org.au/schemas/maps/genbank/>.
+@prefix ncbi:        <http://arga.org.au/schemas/maps/ncbi/>.
 @prefix genbank_model:  <http://arga.org.au/schemas/maps/genbank/model/>.
 @prefix bpa:            <http://arga.org.au/schemas/maps/bpa/>.
 @prefix bpa_model:      <http://arga.org.au/schemas/maps/bpa/model/>.
@@ -13,13 +13,42 @@ model:bpa_tsi :models bpa:library;
               :models bpa:sequencing_runs;
               :models bpa:assembly.
 
+model:sample :models ncbi:assembly.
 
-genbank:sequence_runs
+
+ncbi:sequence_runs
 {
-  <entity_id> :hash genbank:wgs_master.
-  <extract_id> :same genbank:biosample.
+  <entity_id> :hash ncbi:wgs_master.
+  <extract_id> :same ncbi:biosample.
 
-  <event_date> :same genbank:seq_rel_date.
+  <event_date> :same ncbi:seq_rel_date.
+}
+
+
+ncbi:assembly
+{
+  <entity_id>   :hash ncbi:\#assembly_accession.
+  <assembly_id> :same ncbi:\#assembly_accession.
+  <sequence_id> :same ncbi:wgs_master.
+
+  <canonical_name>              :same     ncbi:scientific_name.
+  <scientific_name_authorship>  :same     ncbi:authority.
+  <scientific_name>             :combines (<canonical_name> <scientific_name_authorship>).
+
+  <event_date>                :same ncbi:seq_rel_date.
+  <name>                      :same ncbi:asm_name.
+  <type>                      :same ncbi:refseq_category.
+
+  <size>                      :same ncbi:genome_size.
+  <size_ungapped>             :same ncbi:genome_size_ungapped.
+  <number_of_scaffolds>       :same ncbi:scaffold_count.
+  <number_of_contigs>         :same ncbi:contig_count.
+  <number_of_replicons>       :same ncbi:replicon_count.
+
+  <assembled_by>              :same ncbi:asm_submitter.
+  <level>                     :same ncbi:assembly_level.
+  <representation>            :same ncbi:genome_rep.
+  <file_url>                  :same ncbi:ftp_path.
 }
 
 

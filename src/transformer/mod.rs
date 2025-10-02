@@ -21,7 +21,12 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
     let meta = meta(path)?;
 
     info!(mapping = meta.dataset.schema, "Creating triples database (TriG)");
-    let mut dataset = Dataset::new(&meta.dataset.schema)?;
+    let mut dataset = Dataset::new(
+        &meta
+            .dataset
+            .schema
+            .expect("schema must be set in meta.toml for transformations"),
+    )?;
 
     // load the mapping definitions
     dataset.load_trig_path("rdf/names.ttl")?;

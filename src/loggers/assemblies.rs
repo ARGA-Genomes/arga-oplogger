@@ -87,7 +87,7 @@ impl OperationLoader for FrameLoader<AssemblyOperation> {
 #[derive(Debug, Clone, Deserialize)]
 struct Record {
     entity_id: String,
-    library_id: String,
+    library_id: Option<String>,
     assembly_id: String,
     scientific_name: String,
     publication_id: Option<String>,
@@ -97,18 +97,21 @@ struct Record {
     facility: Option<String>,
     name: Option<String>,
     r#type: Option<String>,
+    level: Option<String>,
     method: Option<String>,
     method_version: Option<String>,
     method_link: Option<String>,
-    size: Option<String>,
-    minimum_gap_length: Option<String>,
+    size: Option<i64>,
+    size_ungapped: Option<i64>,
+    minimum_gap_length: Option<i64>,
+    guanine_cytosine_percent: Option<f64>,
     completeness: Option<String>,
     completeness_method: Option<String>,
+    coverage: Option<String>,
+    representation: Option<String>,
     source_molecule: Option<String>,
     reference_genome_used: Option<String>,
     reference_genome_link: Option<String>,
-    number_of_scaffolds: Option<String>,
-    genome_coverage: Option<String>,
     hybrid: Option<String>,
     hybrid_information: Option<String>,
     polishing_or_scaffolding_method: Option<String>,
@@ -116,6 +119,9 @@ struct Record {
     computational_infrastructure: Option<String>,
     system_used: Option<String>,
     assembly_n50: Option<String>,
+    number_of_scaffolds: Option<i32>,
+    number_of_contigs: Option<i32>,
+    number_of_replicons: Option<i32>,
 }
 
 impl IntoFrame for Record {
@@ -128,26 +134,30 @@ impl IntoFrame for Record {
     fn into_frame(self, mut frame: AssemblyFrame) -> AssemblyFrame {
         use AssemblyAtom::*;
 
-        frame.push(LibraryId(self.library_id));
         frame.push(AssemblyId(self.assembly_id));
         frame.push(ScientificName(self.scientific_name));
+        frame_push_opt!(frame, LibraryId, self.library_id);
         frame_push_opt!(frame, PublicationId, self.publication_id);
         frame_push_opt!(frame, EventDate, self.event_date);
         frame_push_opt!(frame, EventTime, self.event_time);
+        frame_push_opt!(frame, Facility, self.facility);
         frame_push_opt!(frame, Name, self.name);
         frame_push_opt!(frame, Type, self.r#type);
+        frame_push_opt!(frame, Level, self.level);
         frame_push_opt!(frame, Method, self.method);
         frame_push_opt!(frame, MethodVersion, self.method_version);
         frame_push_opt!(frame, MethodLink, self.method_link);
         frame_push_opt!(frame, Size, self.size);
+        frame_push_opt!(frame, SizeUngapped, self.size_ungapped);
         frame_push_opt!(frame, MinimumGapLength, self.minimum_gap_length);
+        frame_push_opt!(frame, GuanineCytosinePercent, self.guanine_cytosine_percent);
         frame_push_opt!(frame, Completeness, self.completeness);
         frame_push_opt!(frame, CompletenessMethod, self.completeness_method);
         frame_push_opt!(frame, SourceMolecule, self.source_molecule);
         frame_push_opt!(frame, ReferenceGenomeUsed, self.reference_genome_used);
         frame_push_opt!(frame, ReferenceGenomeLink, self.reference_genome_link);
-        frame_push_opt!(frame, NumberOfScaffolds, self.number_of_scaffolds);
-        frame_push_opt!(frame, GenomeCoverage, self.genome_coverage);
+        frame_push_opt!(frame, Coverage, self.coverage);
+        frame_push_opt!(frame, Representation, self.representation);
         frame_push_opt!(frame, Hybrid, self.hybrid);
         frame_push_opt!(frame, HybridInformation, self.hybrid_information);
         frame_push_opt!(frame, PolishingOrScaffoldingMethod, self.polishing_or_scaffolding_method);
@@ -155,6 +165,9 @@ impl IntoFrame for Record {
         frame_push_opt!(frame, ComputationalInfrastructure, self.computational_infrastructure);
         frame_push_opt!(frame, SystemUsed, self.system_used);
         frame_push_opt!(frame, AssemblyN50, self.assembly_n50);
+        frame_push_opt!(frame, NumberOfScaffolds, self.number_of_scaffolds);
+        frame_push_opt!(frame, NumberOfContigs, self.number_of_contigs);
+        frame_push_opt!(frame, NumberOfReplicons, self.number_of_replicons);
         frame
     }
 }
@@ -207,7 +220,7 @@ struct Lookups;
 
 struct AssemblyWithLibrary {
     assembly: models::Assembly,
-    library_entity_id: String,
+    library_entity_id: Option<String>,
 }
 
 impl Reducer<Lookups> for AssemblyWithLibrary {
@@ -234,8 +247,7 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
         let mut source_molecule = None;
         let mut reference_genome_used = None;
         let mut reference_genome_link = None;
-        let mut number_of_scaffolds = None;
-        let mut genome_coverage = None;
+        let mut coverage = None;
         let mut hybrid = None;
         let mut hybrid_information = None;
         let mut polishing_or_scaffolding_method = None;
@@ -243,6 +255,14 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
         let mut computational_infrastructure = None;
         let mut system_used = None;
         let mut assembly_n50 = None;
+        let mut number_of_scaffolds = None;
+        let mut number_of_contigs = None;
+        let mut number_of_replicons = None;
+        let mut facility = None;
+        let mut level = None;
+        let mut size_ungapped = None;
+        let mut guanine_cytosine_percent = None;
+        let mut representation = None;
 
 
         for atom in atoms {
@@ -266,8 +286,7 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
                 SourceMolecule(value) => source_molecule = Some(value),
                 ReferenceGenomeUsed(value) => reference_genome_used = Some(value),
                 ReferenceGenomeLink(value) => reference_genome_link = Some(value),
-                NumberOfScaffolds(value) => number_of_scaffolds = Some(value),
-                GenomeCoverage(value) => genome_coverage = Some(value),
+                Coverage(value) => coverage = Some(value),
                 Hybrid(value) => hybrid = Some(value),
                 HybridInformation(value) => hybrid_information = Some(value),
                 PolishingOrScaffoldingMethod(value) => polishing_or_scaffolding_method = Some(value),
@@ -275,19 +294,28 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
                 ComputationalInfrastructure(value) => computational_infrastructure = Some(value),
                 SystemUsed(value) => system_used = Some(value),
                 AssemblyN50(value) => assembly_n50 = Some(value),
+                NumberOfScaffolds(value) => number_of_scaffolds = Some(value),
+                NumberOfContigs(value) => number_of_contigs = Some(value),
+                NumberOfReplicons(value) => number_of_replicons = Some(value),
+                Facility(value) => facility = Some(value),
+                Level(value) => level = Some(value),
+                SizeUngapped(value) => size_ungapped = Some(value),
+                GuanineCytosinePercent(value) => guanine_cytosine_percent = Some(value),
+                Representation(value) => representation = Some(value),
             }
         }
 
         // error out if a mandatory atom is not present. without these fields
         // we cannot construct a reduced record
-        let library_id = library_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "LibraryId".to_string()))?;
+        // let library_id = library_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "LibraryId".to_string()))?;
         let assembly_id = assembly_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "AssemblyId".to_string()))?;
         let scientific_name =
             scientific_name.ok_or(ReduceError::MissingAtom(entity_id.clone(), "ScientificName".to_string()))?;
 
-        let library_entity_id = xxh3_64(library_id.as_bytes());
+        // let library_entity_id = xxh3_64(library_id.as_bytes());
         let scientific_name_entity_id = xxh3_64(scientific_name.as_bytes());
 
+        let library_entity_id = library_id.map(|id| xxh3_64(id.as_bytes()).to_string());
         let publication_entity_id = publication_id.map(|id| xxh3_64(id.as_bytes()).to_string());
 
         let record = models::Assembly {
@@ -299,18 +327,24 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
             event_time,
             name,
             type_,
+            level,
             method,
             method_version,
             method_link,
             size,
+            size_ungapped,
             minimum_gap_length,
+            guanine_cytosine_percent,
             completeness,
             completeness_method,
+            coverage,
+            representation,
             source_molecule,
             reference_genome_used,
             reference_genome_link,
             number_of_scaffolds,
-            genome_coverage,
+            number_of_contigs,
+            number_of_replicons,
             hybrid,
             hybrid_information,
             polishing_or_scaffolding_method,
@@ -322,7 +356,7 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
 
         Ok(AssemblyWithLibrary {
             assembly: record,
-            library_entity_id: library_entity_id.to_string(),
+            library_entity_id,
         })
     }
 }
@@ -349,10 +383,13 @@ pub fn update() -> Result<(), Error> {
             for record in chunk {
                 match record {
                     Ok(record) => {
-                        links.push((
-                            library_assemblies::library_entity_id.eq(&record.library_entity_id),
-                            library_assemblies::assembly_entity_id.eq(&record.assembly.entity_id),
-                        ));
+                        if let Some(library_entity_id) = record.library_entity_id.clone() {
+                            links.push((
+                                library_assemblies::library_entity_id.eq(library_entity_id),
+                                library_assemblies::assembly_entity_id.eq(&record.assembly.entity_id),
+                            ));
+                        }
+
                         valid_records.push(&record.assembly);
                     }
                     Err(err) => error!(?err),
@@ -373,18 +410,23 @@ pub fn update() -> Result<(), Error> {
                     event_time.eq(excluded(event_time)),
                     name.eq(excluded(name)),
                     type_.eq(excluded(type_)),
+                    level.eq(excluded(level)),
                     method.eq(excluded(method)),
                     method_version.eq(excluded(method_version)),
                     method_link.eq(excluded(method_link)),
                     size.eq(excluded(size)),
+                    size_ungapped.eq(excluded(size_ungapped)),
                     minimum_gap_length.eq(excluded(minimum_gap_length)),
                     completeness.eq(excluded(completeness)),
                     completeness_method.eq(excluded(completeness_method)),
+                    coverage.eq(excluded(coverage)),
+                    representation.eq(excluded(representation)),
                     source_molecule.eq(excluded(source_molecule)),
                     reference_genome_used.eq(excluded(reference_genome_used)),
                     reference_genome_link.eq(excluded(reference_genome_link)),
                     number_of_scaffolds.eq(excluded(number_of_scaffolds)),
-                    genome_coverage.eq(excluded(genome_coverage)),
+                    number_of_contigs.eq(excluded(number_of_contigs)),
+                    number_of_replicons.eq(excluded(number_of_replicons)),
                     hybrid.eq(excluded(hybrid)),
                     hybrid_information.eq(excluded(hybrid_information)),
                     polishing_or_scaffolding_method.eq(excluded(polishing_or_scaffolding_method)),

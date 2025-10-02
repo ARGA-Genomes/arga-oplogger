@@ -21,7 +21,7 @@ pub struct Dataset {
     /// RFC 3339
     pub published_at: toml::value::Datetime,
     pub url: String,
-    pub schema: String,
+    pub schema: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
