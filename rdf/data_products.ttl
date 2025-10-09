@@ -1,0 +1,35 @@
+@base <http://arga.org.au/schemas/fields/>.
+
+@prefix :       <http://arga.org.au/schemas/mapping/>.
+@prefix model:  <http://arga.org.au/model/>.
+@prefix tsi:    <http://arga.org.au/schemas/maps/tsi/>.
+
+model:data_products_publications :models tsi:data_products.
+
+
+tsi:data_products
+{
+  <entity_id>              :hash tsi:data:sequencing_analysis_ID.
+  <organism_id>            :same tsi:organism:entity_id.
+  <extract_id>             :same tsi:lab_sample:extract_id.
+  <sequence_run_id>        :same tsi:data:sequencing_run_ID.
+
+  <sequence_sample_id>     :same tsi:data:sequencing_sample_id.
+  <sequence_analysis_id>   :same tsi:data:sequencing_analysis_ID.
+  <notes>                  :same tsi:data:sequencing_note.
+  <context>                :same tsi:data:data_context.
+  <type>                   :same tsi:data:raw_data_type.
+  <file_type>              :same tsi:data:raw_data_file_type.
+  <url>                    :same tsi:data:raw_data_URL.
+  <licence>                :same tsi:data:licence.
+  <access>                 :same tsi:data:access.
+
+  <custodian>              :same tsi:data:data_custodian.
+  <custodian_orcid>        :same tsi:data:data_custodian_ID.
+
+  <citation>               :same tsi:data:source.
+  <source_url>             :same tsi:data:source_URL.
+
+  <custodian_entity_id>    :hash_first (<custodian_orcid> <custodian>).
+  <publication_entity_id>  :hash_first (<source_url> <citation>).
+}

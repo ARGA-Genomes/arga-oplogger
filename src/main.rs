@@ -133,6 +133,8 @@ pub enum UpdateCommand {
     SequenceRuns,
     /// Update assemblies with the reduced logs
     Assemblies,
+    /// Update data products with the reduced logs
+    DataProducts,
 }
 
 #[derive(clap::Subcommand)]
@@ -249,6 +251,7 @@ fn main() -> Result<(), Error> {
             UpdateCommand::Libraries => libraries::update()?,
             UpdateCommand::SequenceRuns => sequence_runs::update()?,
             UpdateCommand::Assemblies => assemblies::update()?,
+            UpdateCommand::DataProducts => data_products::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

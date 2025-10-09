@@ -280,11 +280,13 @@ impl Reducer<Lookups> for models::Specimen {
     fn reduce(entity_id: String, atoms: Vec<Self::Atom>, lookups: &Lookups) -> Result<Self, Error> {
         use TissueAtom::*;
 
+        let mut tissue_id = None;
         let mut organism_id = None;
         let mut scientific_name = None;
 
         for atom in atoms {
             match atom {
+                TissueId(value) => tissue_id = Some(value),
                 OrganismId(value) => organism_id = Some(value),
                 ScientificName(value) => scientific_name = Some(value),
                 _ => {}
@@ -293,6 +295,7 @@ impl Reducer<Lookups> for models::Specimen {
 
         // error out if a mandatory atom is not present. without these fields
         // we cannot construct a reduced record
+        let tissue_id = tissue_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "TissueId".to_string()))?;
         let organism_id = organism_id.ok_or(ReduceError::MissingAtom(entity_id.clone(), "OrganismId".to_string()))?;
         let scientific_name =
             scientific_name.ok_or(ReduceError::MissingAtom(entity_id.clone(), "ScientificName".to_string()))?;
@@ -302,6 +305,7 @@ impl Reducer<Lookups> for models::Specimen {
 
         let record = models::Specimen {
             entity_id,
+            specimen_id: Some(tissue_id),
             organism_id: organism_id.to_string(),
             // everything in our database basically links to a name. we never should get an error
             // here as all names _should_ be imported with every dataset. however that is outside
@@ -354,6 +358,7 @@ pub fn update() -> Result<(), Error> {
                 .do_update()
                 .set((
                     entity_id.eq(excluded(entity_id)),
+                    specimen_id.eq(excluded(specimen_id)),
                     organism_id.eq(excluded(organism_id)),
                     name_id.eq(excluded(name_id)),
                 ))

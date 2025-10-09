@@ -19,6 +19,11 @@ model:bpa_tsi :models bpa:organisms;
               :models bpa:collecting;
               :models bpa:tissues.
 
+model:organisms     :models tsi:organisms.
+model:livestate     :models tsi:organisms.
+model:collecting    :models tsi:collecting.
+model:tissues       :models tsi:tissues.
+model:registrations :models tsi:registrations.
 
 ncbi:organisms
 {
@@ -201,7 +206,8 @@ tsi:curators {
 
 
 tsi:registrations {
-  <entity_id>               :hash (<institution_code> <collection> <collection_code>).
+  <entity_id>               :hash (<organism_id> <institution_code> <collection> <collection_code>).
+  <specimen_id>             :hash_first (<tissue_id> <material_sample_id> <organism_id>).
   <organism_id>             :same tsi:registrations:organism_id.
   <catalogue_id>            :same tsi:registrations:catalogue_id.
   <field_id>                :same tsi:registrations:field_id.
@@ -229,7 +235,6 @@ tsi:registrations {
   <source_url>              :same tsi:registrations:source_URL.
   <doi>                     :same tsi:registrations:source_URL.
 }
-
 
 
 # bnodes will clash with ones specified in graphs if converted into triples via a union graph

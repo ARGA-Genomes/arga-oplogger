@@ -26,7 +26,7 @@ pub struct Publication {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Publication>, TransformError> {
     use rdf::Publication::*;
 
-    let iris = dataset.scope(&["extractions"]);
+    let iris = dataset.scope(&["data_products"]);
     let iris = iris.iter().map(|i| i.as_str()).collect();
     let graph = dataset.graph(&iris);
 

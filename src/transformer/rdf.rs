@@ -1326,6 +1326,106 @@ impl From<(Assembly, Literal)> for AssemblyField {
 }
 
 
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum DataProduct {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:organism_id")]
+    OrganismId,
+    #[iri("fields:extract_id")]
+    ExtractId,
+    #[iri("fields:sequence_run_id")]
+    SequenceRunId,
+
+    #[iri("fields:sequence_sample_id")]
+    SequenceSampleId,
+    #[iri("fields:sequence_analysis_id")]
+    SequenceAnalysisId,
+    #[iri("fields:notes")]
+    Notes,
+    #[iri("fields:context")]
+    Context,
+    #[iri("fields:type")]
+    Type,
+    #[iri("fields:file_type")]
+    FileType,
+    #[iri("fields:url")]
+    Url,
+    #[iri("fields:licence")]
+    Licence,
+    #[iri("fields:access")]
+    Access,
+    #[iri("fields:custodian")]
+    Custodian,
+    #[iri("fields:custodian_orcid")]
+    CustodianOrcid,
+    #[iri("fields:citation")]
+    Citation,
+    #[iri("fields:source_url")]
+    SourceUrl,
+
+    #[iri("fields:custodian_entity_id")]
+    CustodianEntityId,
+    #[iri("fields:publication_entity_id")]
+    PublicationEntityId,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum DataProductField {
+    EntityId(String),
+    OrganismId(String),
+    ExtractId(String),
+    SequenceRunId(String),
+
+    SequenceSampleId(String),
+    SequenceAnalysisId(String),
+    Notes(String),
+    Context(String),
+    Type(String),
+    FileType(String),
+    Url(String),
+    Licence(String),
+    Access(String),
+    Custodian(String),
+    CustodianOrcid(String),
+    Citation(String),
+    SourceUrl(String),
+
+    CustodianEntityId(String),
+    PublicationEntityId(String),
+}
+
+
+impl From<(DataProduct, Literal)> for DataProductField {
+    fn from(source: (DataProduct, Literal)) -> Self {
+        use DataProduct::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (OrganismId, Literal::String(value)) => Self::OrganismId(value),
+            (ExtractId, Literal::String(value)) => Self::ExtractId(value),
+            (SequenceRunId, Literal::String(value)) => Self::SequenceRunId(value),
+            (SequenceSampleId, Literal::String(value)) => Self::SequenceSampleId(value),
+            (SequenceAnalysisId, Literal::String(value)) => Self::SequenceAnalysisId(value),
+            (Notes, Literal::String(value)) => Self::Notes(value),
+            (Context, Literal::String(value)) => Self::Context(value),
+            (Type, Literal::String(value)) => Self::Type(value),
+            (FileType, Literal::String(value)) => Self::FileType(value),
+            (Url, Literal::String(value)) => Self::Url(value),
+            (Licence, Literal::String(value)) => Self::Licence(value),
+            (Access, Literal::String(value)) => Self::Access(value),
+            (Custodian, Literal::String(value)) => Self::Custodian(value),
+            (CustodianOrcid, Literal::String(value)) => Self::CustodianOrcid(value),
+            (Citation, Literal::String(value)) => Self::Citation(value),
+            (SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
+            (CustodianEntityId, Literal::String(value)) => Self::CustodianEntityId(value),
+            (PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
+        }
+    }
+}
+
+
 pub fn try_from_term<'a, T>(value: &'a SimpleTerm<'static>) -> Result<T, TransformError>
 where
     T: TryFrom<&'a iref::Iri>,

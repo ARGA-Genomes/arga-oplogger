@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod assembly;
 pub mod collecting;
+pub mod data_products;
 pub mod extraction;
 pub mod library;
 pub mod name;

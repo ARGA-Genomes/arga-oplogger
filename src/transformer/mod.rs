@@ -34,6 +34,7 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
     dataset.load_trig_path("rdf/subsamples.ttl")?;
     dataset.load_trig_path("rdf/extractions.ttl")?;
     dataset.load_trig_path("rdf/sequences.ttl")?;
+    dataset.load_trig_path("rdf/data_products.ttl")?;
     dataset.load_trig_path("rdf/arga.ttl")?;
 
     let file = File::open(path)?;
@@ -98,6 +99,7 @@ fn export(dataset: Dataset) -> Result<(), Error> {
     export_libraries(&dataset)?;
     export_sequencing_runs(&dataset)?;
     export_assemblies(&dataset)?;
+    export_data_products(&dataset)?;
 
     Ok(())
 }
@@ -231,6 +233,18 @@ fn export_assemblies(dataset: &Dataset) -> Result<(), Error> {
     let mut writer = csv::Writer::from_path("out/assemblies.csv")?;
     for assembly in assemblies {
         writer.serialize(assembly)?;
+    }
+
+    Ok(())
+}
+
+#[tracing::instrument(skip_all)]
+fn export_data_products(dataset: &Dataset) -> Result<(), Error> {
+    let data_products = models::data_products::get_all(&dataset)?;
+
+    let mut writer = csv::Writer::from_path("out/data_products.csv")?;
+    for product in data_products {
+        writer.serialize(product)?;
     }
 
     Ok(())

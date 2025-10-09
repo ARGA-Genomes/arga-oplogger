@@ -3,6 +3,7 @@ pub mod admin_media;
 pub mod agents;
 pub mod assemblies;
 pub mod collections;
+pub mod data_products;
 pub mod datasets;
 pub mod extractions;
 pub mod libraries;

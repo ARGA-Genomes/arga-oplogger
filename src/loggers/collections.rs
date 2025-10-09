@@ -8,13 +8,13 @@ use serde::Deserialize;
 use tracing::error;
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::database::{name_lookup, FrameLoader, StringMap};
+use crate::database::{FrameLoader, StringMap, name_lookup};
 use crate::errors::{Error, LookupError, ReduceError};
 use crate::frames::IntoFrame;
-use crate::readers::{meta, OperationLoader};
+use crate::readers::{OperationLoader, meta};
 use crate::reducer::{DatabaseReducer, EntityPager, Reducer};
 use crate::utils::new_progress_bar;
-use crate::{frame_push_opt, import_compressed_csv_stream, FrameProgress};
+use crate::{FrameProgress, frame_push_opt, import_compressed_csv_stream};
 
 type CollectionEventFrame = DataFrame<CollectionEventAtom>;
 
@@ -223,6 +223,7 @@ pub fn update() -> Result<(), Error> {
                             entity_id: record.entity_id.clone(),
                             organism_id: record.organism_id.clone(),
                             name_id: record.name_id.clone(),
+                            specimen_id: record.material_sample_id.clone(),
                         });
                     }
                     Err(err) => error!(?err),
@@ -233,7 +234,13 @@ pub fn update() -> Result<(), Error> {
             diesel::insert_into(specimens::table)
                 .values(specimens)
                 .on_conflict(specimens::entity_id)
-                .do_nothing()
+                .do_update()
+                .set((
+                    specimens::entity_id.eq(excluded(specimens::entity_id)),
+                    specimens::specimen_id.eq(excluded(specimens::specimen_id)),
+                    specimens::organism_id.eq(excluded(specimens::organism_id)),
+                    specimens::name_id.eq(excluded(specimens::name_id)),
+                ))
                 .execute(&mut conn)?;
 
             // postgres always creates a new row version so we cant get
@@ -243,6 +250,7 @@ pub fn update() -> Result<(), Error> {
                 .on_conflict(entity_id)
                 .do_update()
                 .set((
+                    material_sample_id.eq(excluded(material_sample_id)),
                     field_collecting_id.eq(excluded(field_collecting_id)),
                     name_id.eq(excluded(name_id)),
                     organism_id.eq(excluded(organism_id)),
@@ -408,6 +416,10 @@ impl Reducer<Lookups> for models::CollectionEvent {
                 .get(&scientific_name)
                 .ok_or(LookupError::Name(scientific_name))?
                 .clone(),
+
+            // the text version of the collection id is the same as the specimen id but since we
+            // already have data we need to transition to it from null first.
+            material_sample_id: Some(specimen_id),
 
             // every collection must have an organism. we will stub it out if the dataset doesn't
             // actually include any organism data
