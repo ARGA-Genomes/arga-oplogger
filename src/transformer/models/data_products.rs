@@ -5,7 +5,7 @@ use tracing::instrument;
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, DataProductField, Literal};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -33,12 +33,16 @@ pub struct DataProduct {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<DataProduct>, Error> {
     use rdf::DataProduct::*;
 
-    let iris = dataset.scope(&["data_products"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["data_products"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
 
-    let data: HashMap<Literal, Vec<DataProductField>> = resolve_data(
-        &graph,
+    let resolver = Resolver::new(dataset);
+
+
+    let data: HashMap<Literal, Vec<DataProductField>> = resolver.resolve(
         &[
             EntityId,
             OrganismId,
@@ -60,6 +64,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<DataProduct>, Error> {
             CustodianEntityId,
             PublicationEntityId,
         ],
+        &scope,
     )?;
 
 

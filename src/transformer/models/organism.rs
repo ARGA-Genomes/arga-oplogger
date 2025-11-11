@@ -5,7 +5,7 @@ use tracing::instrument;
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, Literal, OrganismField};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -53,13 +53,16 @@ pub struct Organism {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Organism>, Error> {
     use rdf::Organism::*;
 
-    let iris = dataset.scope(&["organisms"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["organisms"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
 
-    let data: HashMap<Literal, Vec<OrganismField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<OrganismField>> = resolver.resolve(
         &[
             EntityId,
             OrganismId,
@@ -96,6 +99,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Organism>, Error> {
             CanonicalName,
             ScientificNameAuthorship,
         ],
+        &scope,
     )?;
 
 

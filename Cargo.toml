@@ -20,7 +20,9 @@ iref = { version = "3.2.2", features = ["macros"] }
 iref-enum = "3.0.0"
 memchr = "2.7.4"
 memmap2 = "0.9.4"
+oxigraph = { version = "0.5.1", default-features = false, features = ["rdf-12", "rocksdb"] }
 oxiri = "0.2.11"
+oxrocksdb-sys = "0.5.1"
 quick-xml = "0.36.1"
 rayon = "1.10.0"
 serde = { version = "1.0.204", features = ["derive"] }

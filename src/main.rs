@@ -20,6 +20,7 @@ use nomenclatural_acts::NomenclaturalActs;
 use readers::plazi;
 use sequences::Sequences;
 use taxonomic_acts::TaxonomicActs;
+use tracing_subscriber::field::MakeExt;
 use tracing_subscriber::fmt::format::FmtSpan;
 
 use crate::datasets::Datasets;
@@ -155,9 +156,10 @@ fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
     // tracing_subscriber::fmt::init();
     tracing_subscriber::fmt::fmt()
+        .map_fmt_fields(|f| f.debug_alt())
         .with_span_events(FmtSpan::CLOSE)
         .with_target(false)
-        .with_level(false)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
     set_default_instrumentation(database::simple_logger).expect("Failed to setup database instrumentation");

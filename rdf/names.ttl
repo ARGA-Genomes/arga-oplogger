@@ -1,13 +1,14 @@
 @base <http://arga.org.au/schemas/fields/>.
 
 @prefix :               <http://arga.org.au/schemas/mapping/>.
-@prefix model:      <http://arga.org.au/model/>.
+@prefix model:          <http://arga.org.au/model/>.
 @prefix bpa:            <http://arga.org.au/schemas/maps/bpa/>.
-@prefix bpa_model:      <http://arga.org.au/schemas/maps/bpa/model/>.
+@prefix ncbi:           <http://arga.org.au/schemas/maps/ncbi/>.
 
 
-bpa_model:bpa_tsi :models bpa:names.
 model:bpa_tsi :models bpa:names.
+model:ncbiTaxonomy :models ncbi:names.
+model:taxonomy_sample :models ncbi:names.
 
 
 bpa:names
@@ -16,4 +17,17 @@ bpa:names
   <canonical_name>             :same     bpa:scientific_name.
   <scientific_name_authorship> :same     bpa:scientific_name_authorship.
   <scientific_name>            :combines (<canonical_name> <scientific_name_authorship>).
+}
+
+
+ncbi:names
+{
+  # the ncbi taxonomy file includes the full hierarchy so we filter the names
+  # to only include species
+  <entity_id>                  :hash    <scientific_name>;
+                               :when << <rank> :is "species" >>.
+
+  <taxon_id>                   :same ncbi:tax_id.
+  <canonical_name>             :same ncbi:scientific_name.
+  <scientific_name>            :same ncbi:scientific_name.
 }

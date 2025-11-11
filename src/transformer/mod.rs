@@ -55,8 +55,11 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
         let message = format!("Loading {}", path.to_str().unwrap_or_default());
         let stream = ProgressStream::new(entry, size as usize, &message);
 
+        // dataset.load_csv_oxi(stream, &name)?;
         dataset.load_csv(stream, &name)?;
     }
+
+    // Ok(())
 
     info!("CSV files loaded into TriG dataset");
     export(dataset)

@@ -74,6 +74,9 @@ pub enum Mapping {
 
     #[iri("mapping:when")]
     When,
+
+    #[iri("mapping:from")]
+    From,
 }
 
 impl TryFrom<&SimpleTerm<'static>> for Mapping {
@@ -103,6 +106,23 @@ impl TryFrom<&SimpleTerm<'static>> for MappingCondition {
 }
 
 
+#[derive(Debug, IriEnum)]
+#[iri_prefix("mapping" = "http://arga.org.au/schemas/mapping/")]
+pub enum FromCondition {
+    #[iri("mapping:via")]
+    Via,
+}
+
+impl TryFrom<&SimpleTerm<'static>> for FromCondition {
+    type Error = TransformError;
+
+    fn try_from(value: &SimpleTerm<'static>) -> Result<Self, Self::Error> {
+        let mapping = try_from_term(&value)?;
+        Ok(mapping)
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub enum Map {
     Same(iref::IriBuf),
@@ -110,6 +130,7 @@ pub enum Map {
     Hash(iref::IriBuf),
     HashFirst(Vec<iref::IriBuf>),
     When(iref::IriBuf, Condition),
+    From { graph: iref::IriBuf, via: iref::IriBuf },
 }
 
 
@@ -1253,6 +1274,9 @@ pub enum Assembly {
     CanonicalName,
     #[iri("fields:scientific_name_authorship")]
     ScientificNameAuthorship,
+
+    #[iri("fields:taxon_id")]
+    TaxonId,
 }
 
 
@@ -1286,6 +1310,7 @@ pub enum AssemblyField {
     AssemblyN50(String),
     CanonicalName(String),
     ScientificNameAuthorship(String),
+    TaxonId(String),
 }
 
 
@@ -1321,6 +1346,7 @@ impl From<(Assembly, Literal)> for AssemblyField {
             (AssemblyN50, Literal::String(value)) => Self::AssemblyN50(value),
             (CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+            (TaxonId, Literal::String(value)) => Self::TaxonId(value),
         }
     }
 }

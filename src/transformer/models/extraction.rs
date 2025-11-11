@@ -5,7 +5,7 @@ use tracing::{info, instrument};
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, ExtractionField, Literal};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -37,14 +37,17 @@ pub struct Extraction {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
     use rdf::Extraction::*;
 
-    let iris = dataset.scope(&["extractions"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["extractions"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
 
     info!("Resolving data");
-    let data: HashMap<Literal, Vec<ExtractionField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<ExtractionField>> = resolver.resolve(
         &[
             EntityId,
             SubsampleId,
@@ -72,6 +75,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
             Doi,
             Citation,
         ],
+        &scope,
     )?;
 
 
@@ -137,15 +141,20 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Extraction>, Error> {
 /// original collection event, going via tissues if necessary.
 #[instrument(skip_all)]
 pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
-    let iris = dataset.scope(&["extractions"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["extractions"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
+
 
     let names = super::subsample::get_scientific_names(&dataset)?;
     let mut extractions = HashMap::new();
 
     let data: HashMap<Literal, Vec<ExtractionField>> =
-        resolve_data(&graph, &[rdf::Extraction::EntityId, rdf::Extraction::SubsampleId])?;
+        resolver.resolve(&[rdf::Extraction::EntityId, rdf::Extraction::SubsampleId], &scope)?;
 
     for (_idx, fields) in data.into_iter() {
         let mut entity_id = None;

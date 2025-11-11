@@ -15,6 +15,8 @@ model:bpa_tsi :models bpa:library;
 
 model:sample :models ncbi:assembly.
 
+model:assembly_summary_genbank :models ncbi:assembly.
+
 
 ncbi:sequence_runs
 {
@@ -27,13 +29,16 @@ ncbi:sequence_runs
 
 ncbi:assembly
 {
-  <entity_id>   :hash ncbi:\#assembly_accession.
-  <assembly_id> :same ncbi:\#assembly_accession.
-  <sequence_id> :same ncbi:wgs_master.
+  <entity_id>                 :hash ncbi:\#assembly_accession.
+  <assembly_id>               :same ncbi:\#assembly_accession.
+  <sequence_id>               :same ncbi:wgs_master.
+  <taxon_id>                  :same ncbi:taxid.
 
-  <canonical_name>              :same     ncbi:scientific_name.
-  <scientific_name_authorship>  :same     ncbi:authority.
-  <scientific_name>             :combines (<canonical_name> <scientific_name_authorship>).
+  # genbank doesn't include the scientific name so we copy it from the
+  # names dataset modeled by the ncbi-taxonomy data. both maps must specify
+  # a taxon_id subject to link datasets
+  <scientific_name>           :same     ncbi:scientific_name;
+                              :from  << ncbi:names :via <taxon_id> >>.
 
   <event_date>                :same ncbi:seq_rel_date.
   <name>                      :same ncbi:asm_name.

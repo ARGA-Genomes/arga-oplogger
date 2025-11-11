@@ -11,7 +11,7 @@ use crate::transformer::rdf::{
     LibraryField,
     Literal,
 };
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize, Hash, Eq, PartialEq)]
@@ -34,17 +34,22 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
 
 
 pub fn get_custodian_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
-    let iris = dataset.scope(&["data_products"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["data_products"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
 
-    let data: HashMap<Literal, Vec<DataProductField>> = resolve_data(
-        &graph,
+    let resolver = Resolver::new(dataset);
+
+
+    let data: HashMap<Literal, Vec<DataProductField>> = resolver.resolve(
         &[
             DataProduct::Custodian,
             DataProduct::CustodianOrcid,
             DataProduct::CustodianEntityId,
         ],
+        &scope,
     )?;
 
     let mut agents = Vec::new();
@@ -68,17 +73,21 @@ pub fn get_custodian_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformEr
 
 
 pub fn get_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
-    let iris = dataset.scope(&["extractions"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["extractions"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
 
-    let data: HashMap<Literal, Vec<ExtractionField>> = resolve_data(
-        &graph,
+    let resolver = Resolver::new(dataset);
+
+    let data: HashMap<Literal, Vec<ExtractionField>> = resolver.resolve(
         &[
             Extraction::ExtractedBy,
             Extraction::ExtractedByOrcid,
             Extraction::ExtractedByEntityId,
         ],
+        &scope,
     )?;
 
     let mut agents = Vec::new();
@@ -102,17 +111,21 @@ pub fn get_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformE
 
 
 pub fn get_material_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
-    let iris = dataset.scope(&["extractions"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["extractions"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
 
-    let data: HashMap<Literal, Vec<ExtractionField>> = resolve_data(
-        &graph,
+    let resolver = Resolver::new(dataset);
+
+    let data: HashMap<Literal, Vec<ExtractionField>> = resolver.resolve(
         &[
             Extraction::MaterialExtractedBy,
             Extraction::MaterialExtractedByOrcid,
             Extraction::MaterialExtractedByEntityId,
         ],
+        &scope,
     )?;
 
     let mut agents = Vec::new();
@@ -136,12 +149,16 @@ pub fn get_material_extraction_agents(dataset: &Dataset) -> Result<Vec<Agent>, T
 
 
 pub fn get_prepared_agents(dataset: &Dataset) -> Result<Vec<Agent>, TransformError> {
-    let iris = dataset.scope(&["library"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["library"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
     let data: HashMap<Literal, Vec<LibraryField>> =
-        resolve_data(&graph, &[Library::PreparedBy, Library::PreparedByEntityId])?;
+        resolver.resolve(&[Library::PreparedBy, Library::PreparedByEntityId], &scope)?;
 
     let mut agents = Vec::new();
     for (_idx, fields) in data {

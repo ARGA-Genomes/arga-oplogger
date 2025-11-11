@@ -5,7 +5,7 @@ use tracing::{info, instrument};
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, AssemblyField, Literal};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -43,19 +43,22 @@ pub struct Assembly {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Assembly>, Error> {
     use rdf::Assembly::*;
 
-    let iris = dataset.scope(&["assembly"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["assembly"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
 
+    let resolver = Resolver::new(dataset);
 
     info!("Resolving data");
-    let data: HashMap<Literal, Vec<AssemblyField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<AssemblyField>> = resolver.resolve(
         &[
             EntityId,
             LibraryId,
             AssemblyId,
             ScientificName,
+            TaxonId,
             EventDate,
             Name,
             Type,
@@ -78,9 +81,8 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Assembly>, Error> {
             ComputationalInfrastructure,
             SystemUsed,
             AssemblyN50,
-            CanonicalName,
-            ScientificNameAuthorship,
         ],
+        &scope,
     )?;
 
 
@@ -122,6 +124,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Assembly>, Error> {
 
                 AssemblyField::CanonicalName(_) => {}
                 AssemblyField::ScientificNameAuthorship(_) => {}
+                AssemblyField::TaxonId(_) => {}
             }
         }
 

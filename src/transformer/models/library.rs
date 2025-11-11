@@ -5,7 +5,7 @@ use tracing::{info, instrument};
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, LibraryField, Literal};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -45,14 +45,17 @@ pub struct Library {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
     use rdf::Library::*;
 
-    let iris = dataset.scope(&["library"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["library"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
 
     info!("Resolving data");
-    let data: HashMap<Literal, Vec<LibraryField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<LibraryField>> = resolver.resolve(
         &[
             EntityId,
             ExtractId,
@@ -85,6 +88,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
             ScientificNameAuthorship,
             PreparedByEntityId,
         ],
+        &scope,
     )?;
 
 
@@ -139,20 +143,25 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Library>, Error> {
 /// Get all scientific names.
 #[instrument(skip_all)]
 pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
-    let iris = dataset.scope(&["library"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["library"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
+
 
     let mut names = HashMap::new();
 
-    let data: HashMap<Literal, Vec<LibraryField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<LibraryField>> = resolver.resolve(
         &[
             rdf::Library::EntityId,
             rdf::Library::ScientificName,
             rdf::Library::CanonicalName,
             rdf::Library::ScientificNameAuthorship,
         ],
+        &scope,
     )?;
 
     for (_idx, fields) in data.into_iter() {

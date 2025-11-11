@@ -5,7 +5,7 @@ use tracing::{info, instrument};
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, Literal, NameField};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize, Hash, Eq, PartialEq)]
@@ -21,14 +21,18 @@ pub struct Name {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Name>, Error> {
     use rdf::Name::*;
 
-    let iris = dataset.scope(&["names"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["names"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
 
     info!("Resolving data");
     let data: HashMap<Literal, Vec<NameField>> =
-        resolve_data(&graph, &[EntityId, CanonicalName, ScientificName, ScientificNameAuthorship])?;
+        resolver.resolve(&[EntityId, CanonicalName, ScientificName, ScientificNameAuthorship], &scope)?;
 
 
     let mut names = Vec::new();

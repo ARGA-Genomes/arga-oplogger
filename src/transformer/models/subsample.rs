@@ -5,7 +5,7 @@ use tracing::instrument;
 use crate::errors::Error;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, Literal, SubsampleField};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize)]
@@ -44,13 +44,16 @@ pub struct Subsample {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
     use rdf::Subsample::*;
 
-    let iris = dataset.scope(&["subsamples"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["subsamples"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
 
-    let data: HashMap<Literal, Vec<SubsampleField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<SubsampleField>> = resolver.resolve(
         &[
             EntityId,
             SpecimenId,
@@ -78,6 +81,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
             SampleProcessing,
             SamplePooling,
         ],
+        &scope,
     )?;
 
 
@@ -136,15 +140,20 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Subsample>, Error> {
 /// original collection event.
 #[instrument(skip_all)]
 pub fn get_scientific_names(dataset: &Dataset) -> Result<HashMap<String, String>, Error> {
-    let iris = dataset.scope(&["subsamples"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["subsamples"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
+
 
     let names = super::tissue::get_scientific_names(dataset)?;
     let mut subsamples = HashMap::new();
 
     let data: HashMap<Literal, Vec<SubsampleField>> =
-        resolve_data(&graph, &[rdf::Subsample::EntityId, rdf::Subsample::TissueId])?;
+        resolver.resolve(&[rdf::Subsample::EntityId, rdf::Subsample::TissueId], &scope)?;
 
     for (_idx, fields) in data.into_iter() {
         let mut entity_id = None;

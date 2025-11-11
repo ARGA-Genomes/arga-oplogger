@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::errors::TransformError;
 use crate::transformer::dataset::Dataset;
 use crate::transformer::rdf::{self, Literal, PublicationField};
-use crate::transformer::resolver::resolve_data;
+use crate::transformer::resolver::Resolver;
 
 
 #[derive(Debug, Default, serde::Serialize, Hash, Eq, PartialEq)]
@@ -26,13 +26,16 @@ pub struct Publication {
 pub fn get_all(dataset: &Dataset) -> Result<Vec<Publication>, TransformError> {
     use rdf::Publication::*;
 
-    let iris = dataset.scope(&["data_products"]);
-    let iris = iris.iter().map(|i| i.as_str()).collect();
-    let graph = dataset.graph(&iris);
+    let models = dataset.scope(&["data_products"]);
+    let mut scope = Vec::new();
+    for model in models.iter() {
+        scope.push(iref::Iri::new(model).unwrap());
+    }
+
+    let resolver = Resolver::new(dataset);
 
 
-    let data: HashMap<Literal, Vec<PublicationField>> = resolve_data(
-        &graph,
+    let data: HashMap<Literal, Vec<PublicationField>> = resolver.resolve(
         &[
             // Title,
             // Authors,
@@ -43,6 +46,7 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Publication>, TransformError> {
             // PublicationType,
             EntityId, Doi, Citation, SourceUrl,
         ],
+        &scope,
     )?;
 
     let mut publications = Vec::new();
