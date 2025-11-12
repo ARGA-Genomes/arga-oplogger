@@ -56,13 +56,13 @@ jobs:
         run: podman load -i ./result
 
       - name: Tag image with git sha
-        run: podman tag backend backend:${{ github.sha }}
+        run: podman tag oplogger oplogger:${{ github.sha }}
 
       - name: Push to GitHub container registry
         id: push-to-ghcr
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: backend
+          image: oplogger
           tags: latest ${{ github.sha }}
           registry: ${{ env.REGISTRY }}
 
