@@ -22,7 +22,7 @@ pub type PartialGraph<'a> = PartialUnionGraph<&'a FastDataset, GraphIri<'a>>;
 
 
 pub struct Dataset {
-    pub store: oxigraph::store::Store,
+    // pub store: oxigraph::store::Store,
     pub source: FastDataset,
     pub map: String,
     schema: IriBuf,
@@ -32,10 +32,10 @@ pub struct Dataset {
 impl Dataset {
     pub fn new(map_iri: &str) -> Result<Dataset, TransformError> {
         let source = FastDataset::new();
-        let store = oxigraph::store::Store::open("./triples.db").unwrap();
+        // let store = oxigraph::store::Store::open("./triples.db").unwrap();
 
         Ok(Dataset {
-            store,
+            // store,
             source,
             map: map_iri.to_string(),
             schema: IriBuf::new(map_iri.to_string())?,
@@ -75,134 +75,134 @@ impl Dataset {
         Ok(())
     }
 
-    pub fn load_csv_oxi<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<(), Error> {
-        let base = format!("http://arga.org.au/model/{source_model}/");
-        let source = oxigraph::model::NamedNode::new(base.clone()).unwrap();
+    // pub fn load_csv_oxi<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<(), Error> {
+    //     let base = format!("http://arga.org.au/model/{source_model}/");
+    //     let source = oxigraph::model::NamedNode::new(base.clone()).unwrap();
 
-        // let store = oxigraph::store::Store::new().unwrap();
-        let store = oxigraph::store::Store::open("./triples.db").unwrap();
-        let mut loader = store.bulk_loader();
+    //     // let store = oxigraph::store::Store::new().unwrap();
+    //     let store = oxigraph::store::Store::open("./triples.db").unwrap();
+    //     let mut loader = store.bulk_loader();
 
-        let mut reader = csv::Reader::from_reader(reader);
-        let header_row = reader.headers()?.to_owned();
+    //     let mut reader = csv::Reader::from_reader(reader);
+    //     let header_row = reader.headers()?.to_owned();
 
-        let mut header_iris = Vec::new();
-        // build a header map to get an index for a specific header name.
-        // this is used to derive the entity_id for each record
-        let mut headers = HashMap::new();
-        for (idx, header) in header_row.iter().enumerate() {
-            let header_iri = oxigraph::model::NamedNode::new(format!("{base}{header}")).unwrap();
-            header_iris.push(header_iri);
-            headers.insert(header.to_string(), idx);
-        }
+    //     let mut header_iris = Vec::new();
+    //     // build a header map to get an index for a specific header name.
+    //     // this is used to derive the entity_id for each record
+    //     let mut headers = HashMap::new();
+    //     for (idx, header) in header_row.iter().enumerate() {
+    //         let header_iri = oxigraph::model::NamedNode::new(format!("{base}{header}")).unwrap();
+    //         header_iris.push(header_iri);
+    //         headers.insert(header.to_string(), idx);
+    //     }
 
-        let mut rows: Vec<(oxigraph::model::NamedNode, Vec<oxigraph::model::Literal>)> = Vec::new();
-        let mut quads: Vec<oxigraph::model::Quad> = Vec::new();
+    //     let mut rows: Vec<(oxigraph::model::NamedNode, Vec<oxigraph::model::Literal>)> = Vec::new();
+    //     let mut quads: Vec<oxigraph::model::Quad> = Vec::new();
 
-        // add all the records into the dataset with the corresponding header
-        // as the predicate and the record id as the subject
-        for (record_index, record) in reader.records().enumerate() {
-            let record = record?;
+    //     // add all the records into the dataset with the corresponding header
+    //     // as the predicate and the record id as the subject
+    //     for (record_index, record) in reader.records().enumerate() {
+    //         let record = record?;
 
-            let index_iri = oxigraph::model::NamedNode::new(format!("{base}{record_index}")).unwrap();
-            let mut values: Vec<oxigraph::model::Literal> = Vec::new();
+    //         let index_iri = oxigraph::model::NamedNode::new(format!("{base}{record_index}")).unwrap();
+    //         let mut values: Vec<oxigraph::model::Literal> = Vec::new();
 
-            // (idx, header, value) = (literal, iri, literal)
-            // eg. (123, http://.../scientific_name, My species)
-            for (idx, value) in record.iter().enumerate() {
-                // don't create a triple for empty data as the absence
-                // of a triple is good enough. this improves performance since
-                // we wont create indices for empty data and avoids a stack overflow
-                // in the sophia library when there are too many columns
-                if value.trim().is_empty() {
-                    continue;
-                }
+    //         // (idx, header, value) = (literal, iri, literal)
+    //         // eg. (123, http://.../scientific_name, My species)
+    //         for (idx, value) in record.iter().enumerate() {
+    //             // don't create a triple for empty data as the absence
+    //             // of a triple is good enough. this improves performance since
+    //             // we wont create indices for empty data and avoids a stack overflow
+    //             // in the sophia library when there are too many columns
+    //             if value.trim().is_empty() {
+    //                 continue;
+    //             }
 
-                let header = header_iris.get(idx).unwrap();
-                let quad = oxigraph::model::Quad::new(
-                    oxigraph::model::NamedOrBlankNode::NamedNode(index_iri.clone()),
-                    header.clone(),
-                    oxigraph::model::Term::Literal(value.trim().into()),
-                    source.clone(),
-                );
-                quads.push(quad);
+    //             let header = header_iris.get(idx).unwrap();
+    //             let quad = oxigraph::model::Quad::new(
+    //                 oxigraph::model::NamedOrBlankNode::NamedNode(index_iri.clone()),
+    //                 header.clone(),
+    //                 oxigraph::model::Term::Literal(value.trim().into()),
+    //                 source.clone(),
+    //             );
+    //             quads.push(quad);
 
-                // values.push(value.trim().into());
+    //             // values.push(value.trim().into());
 
-                // let header = header_row.get(idx).expect("CSV field count not consistent");
-                // let header_iri = oxigraph::model::NamedNode::new(format!("{base}{header}")).unwrap();
-                // let index_iri = oxigraph::model::NamedNode::new(format!("{base}{record_index}")).unwrap();
+    //             // let header = header_row.get(idx).expect("CSV field count not consistent");
+    //             // let header_iri = oxigraph::model::NamedNode::new(format!("{base}{header}")).unwrap();
+    //             // let index_iri = oxigraph::model::NamedNode::new(format!("{base}{record_index}")).unwrap();
 
-                // let quad = oxigraph::model::Quad::new(
-                //     oxigraph::model::NamedOrBlankNode::NamedNode(index_iri.into()),
-                //     header_iri,
-                //     oxigraph::model::Term::Literal(value.into()),
-                //     source.clone(),
-                // );
-                // store.insert(&quad).unwrap();
-            }
-
-
-            if quads.len() > 1_000_000 {
-                loader.load_quads(quads).unwrap();
-                quads = Vec::new();
-            }
-
-            // loader.load_quads(quads).unwrap();
-            // let index_iri = oxigraph::model::NamedNode::new(format!("{base}{record_index}")).unwrap();
-            // rows.push((index_iri, values));
-        }
-
-        loader.commit().unwrap();
+    //             // let quad = oxigraph::model::Quad::new(
+    //             //     oxigraph::model::NamedOrBlankNode::NamedNode(index_iri.into()),
+    //             //     header_iri,
+    //             //     oxigraph::model::Term::Literal(value.into()),
+    //             //     source.clone(),
+    //             // );
+    //             // store.insert(&quad).unwrap();
+    //         }
 
 
-        // let quads: Vec<Vec<oxigraph::model::Quad>> = rows
-        //     .into_par_iter()
-        //     .map(|(row_index, values)| {
-        //         let mut row = Vec::new();
+    //         if quads.len() > 1_000_000 {
+    //             loader.load_quads(quads).unwrap();
+    //             quads = Vec::new();
+    //         }
 
-        //         for (idx, value) in values.into_iter().enumerate() {
-        //             if value.value().is_empty() {
-        //                 continue;
-        //             }
+    //         // loader.load_quads(quads).unwrap();
+    //         // let index_iri = oxigraph::model::NamedNode::new(format!("{base}{record_index}")).unwrap();
+    //         // rows.push((index_iri, values));
+    //     }
 
-        //             let header = header_iris.get(idx).unwrap();
-        //             let quad = oxigraph::model::Quad::new(
-        //                 oxigraph::model::NamedOrBlankNode::NamedNode(row_index.clone()),
-        //                 header.clone(),
-        //                 oxigraph::model::Term::Literal(value),
-        //                 source.clone(),
-        //             );
-        //             row.push(quad);
-        //         }
-
-        //         row
-        //     })
-        //     .collect();
+    //     loader.commit().unwrap();
 
 
-        // for (row_index, values) in rows.into_iter() {
-        //     for (idx, value) in values.into_iter().enumerate() {
-        //         if value.value().is_empty() {
-        //             continue;
-        //         }
+    //     // let quads: Vec<Vec<oxigraph::model::Quad>> = rows
+    //     //     .into_par_iter()
+    //     //     .map(|(row_index, values)| {
+    //     //         let mut row = Vec::new();
 
-        //         let header = header_iris.get(idx).unwrap();
-        //         let quad = oxigraph::model::Quad::new(
-        //             oxigraph::model::NamedOrBlankNode::NamedNode(row_index.clone()),
-        //             header.clone(),
-        //             oxigraph::model::Term::Literal(value),
-        //             source.clone(),
-        //         );
+    //     //         for (idx, value) in values.into_iter().enumerate() {
+    //     //             if value.value().is_empty() {
+    //     //                 continue;
+    //     //             }
 
-        //         store.insert(&quad).unwrap();
-        //     }
-        // }
+    //     //             let header = header_iris.get(idx).unwrap();
+    //     //             let quad = oxigraph::model::Quad::new(
+    //     //                 oxigraph::model::NamedOrBlankNode::NamedNode(row_index.clone()),
+    //     //                 header.clone(),
+    //     //                 oxigraph::model::Term::Literal(value),
+    //     //                 source.clone(),
+    //     //             );
+    //     //             row.push(quad);
+    //     //         }
+
+    //     //         row
+    //     //     })
+    //     //     .collect();
 
 
-        info!("Finished loading");
-        Ok(())
-    }
+    //     // for (row_index, values) in rows.into_iter() {
+    //     //     for (idx, value) in values.into_iter().enumerate() {
+    //     //         if value.value().is_empty() {
+    //     //             continue;
+    //     //         }
+
+    //     //         let header = header_iris.get(idx).unwrap();
+    //     //         let quad = oxigraph::model::Quad::new(
+    //     //             oxigraph::model::NamedOrBlankNode::NamedNode(row_index.clone()),
+    //     //             header.clone(),
+    //     //             oxigraph::model::Term::Literal(value),
+    //     //             source.clone(),
+    //     //         );
+
+    //     //         store.insert(&quad).unwrap();
+    //     //     }
+    //     // }
+
+
+    //     info!("Finished loading");
+    //     Ok(())
+    // }
 
     /// Loads a CSV dataset as a TriG model.
     ///

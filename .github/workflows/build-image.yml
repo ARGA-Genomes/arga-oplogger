@@ -1,0 +1,68 @@
+name: Build image and publish to ghcr.io
+
+on:
+  push:
+    branches: [ "main" ]
+
+
+env:
+  REGISTRY: ghcr.io/arga-genomes
+
+  nix_conf: |
+    substituters = https://cache.nixos.org/ https://nix-community.cachix.org
+    trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+    keep-env-derivations = true
+    keep-outputs = true
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install nix
+        uses: nixbuild/nix-quick-install-action@v30
+        with:
+          nix_conf: ${{ env.nix_conf }}
+
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: build-${{ runner.os }}-${{ hashFiles('**/flake.nix', '**/flake.lock') }}
+          purge: true
+          purge-prefixes: build-${{ runner.os }}-
+          purge-created: 0
+          purge-primary-key: never
+          gc-max-store-size: 0
+
+
+      - name: Log in to the GitHub container registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build container image
+        run: nix build .#oci
+
+      - name: Load image into podamn store
+        run: podman load -i ./result
+
+      - name: Tag image with git sha
+        run: podman tag backend backend:${{ github.sha }}
+
+      - name: Push to GitHub container registry
+        id: push-to-ghcr
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: backend
+          tags: latest ${{ github.sha }}
+          registry: ${{ env.REGISTRY }}
+
