@@ -22,8 +22,8 @@
       packages.${system} = rec {
         # build the oplogger executable
         oplogger = naersk'.buildPackage {
-          name = "arga-oplogger";
-          pname = "arga-oplogger";
+          name = "oplogger";
+          pname = "oplogger";
           src = ./.;
           nativeBuildInputs = [ pkgs.postgresql.lib ];
         };

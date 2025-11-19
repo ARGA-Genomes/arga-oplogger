@@ -92,8 +92,8 @@ pub fn extract() -> Result<Option<String>, ExtractError> {
         info!("Download finished");
 
 
-        // info!("Extracting dependent datasets");
-        // super::ncbi_taxonomy::extract()?;
+        info!("Extracting dependent datasets");
+        super::ncbi_taxonomy::extract()?;
 
         Some(package(meta)?)
     }
