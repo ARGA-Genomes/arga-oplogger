@@ -218,26 +218,29 @@ impl Dataset {
     ///   2  http://arga.org.au/schemas/maps/bpa/tissue_id    Spleen02
     ///   2  http://arga.org.au/schemas/maps/bpa/tissue_type  Spleen
     /// ```
-    pub fn load_csv<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<(), Error> {
+    pub fn load_csv<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<usize, Error> {
         // get the source data namespace for all loaded data
         let source = format!("http://arga.org.au/model/{source_model}/");
         let source = Iri::new(source).map_err(TransformError::from)?;
         let schema = Namespace::new(self.schema.as_str()).map_err(TransformError::from)?;
 
-        let mut reader = csv::Reader::from_reader(reader);
+        let mut reader = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(reader);
         let header_row = reader.headers()?.to_owned();
 
-        // build a header map to get an index for a specific header name.
-        // this is used to derive the entity_id for each record
-        let mut headers = HashMap::new();
-        for (idx, header) in header_row.iter().enumerate() {
-            headers.insert(header.to_string(), idx);
+        // build a header map to get a specific header iri from the column index
+        let mut headers = Vec::new();
+        for header in header_row.iter() {
+            let header_iri = schema.get(header).map_err(TransformError::from)?;
+            headers.push(header_iri);
         }
+
+        let mut total = 0;
 
         // add all the records into the dataset with the corresponding header
         // as the predicate and the record id as the subject
         for (record_index, record) in reader.records().enumerate() {
             let record = record?;
+            total = total + 1;
 
             // (idx, header, value) = (literal, iri, literal)
             // eg. (123, http://.../scientific_name, My species)
@@ -250,16 +253,17 @@ impl Dataset {
                     continue;
                 }
 
-                let header = header_row.get(idx).expect("CSV field count not consistent");
-                let header_iri = schema.get(header).map_err(TransformError::from)?;
+                // this is infallible as the csv reader will fail early if the
+                // column count isn't the same for all rows
+                let header = headers[idx];
 
                 self.source
-                    .insert(record_index, header_iri, value, Some(&source))
+                    .insert(record_index, header, value, Some(&source))
                     .map_err(TransformError::from)?;
             }
         }
 
-        Ok(())
+        Ok(total)
     }
 
     pub fn get_source_models(&self, model: &str) -> Result<Vec<Iri<String>>, TransformError> {

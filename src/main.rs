@@ -1,6 +1,7 @@
 mod archive;
 mod database;
 mod errors;
+mod extractor;
 mod frames;
 mod loggers;
 mod operations;
@@ -61,6 +62,9 @@ pub enum Commands {
 
     /// Transform source CSV data into an importable archive
     Transform { path: PathBuf },
+
+    #[command(subcommand)]
+    Extract(ExtractCommand),
 }
 
 #[derive(Args)]
@@ -152,6 +156,13 @@ pub enum PlaziCommand {
 }
 
 
+#[derive(clap::Subcommand)]
+pub enum ExtractCommand {
+    Genbank,
+    NcbiTaxonomy,
+}
+
+
 fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
     // tracing_subscriber::fmt::init();
@@ -159,7 +170,7 @@ fn main() -> Result<(), Error> {
         .map_fmt_fields(|f| f.debug_alt())
         .with_span_events(FmtSpan::CLOSE)
         .with_target(false)
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::ERROR)
         .init();
 
     set_default_instrumentation(database::simple_logger).expect("Failed to setup database instrumentation");
@@ -172,7 +183,8 @@ fn main() -> Result<(), Error> {
             archive.import()?;
         }
         Commands::Transform { path } => {
-            transformer::transform(path)?;
+            let outfile = transformer::transform(path)?;
+            println!("{}", outfile);
         }
         Commands::ImportFile(cmd) => match cmd {
             ImportCommand::Taxa(args) => {
@@ -266,6 +278,17 @@ fn main() -> Result<(), Error> {
                 plazi::document::import_all(args.path.clone(), dataset_version.id)?;
             }
         },
+
+        Commands::Extract(cmd) => {
+            let outfile = match cmd {
+                ExtractCommand::Genbank => crate::extractor::genbank::extract()?,
+                ExtractCommand::NcbiTaxonomy => crate::extractor::ncbi_taxonomy::extract()?,
+            };
+
+            if let Some(filename) = outfile {
+                println!("{}", filename);
+            }
+        }
     }
 
     Ok(())

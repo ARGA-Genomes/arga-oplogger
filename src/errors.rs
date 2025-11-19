@@ -1,3 +1,4 @@
+pub use crate::extractor::errors::*;
 pub use crate::transformer::errors::*;
 
 
@@ -35,6 +36,9 @@ pub enum Error {
 
     #[error(transparent)]
     Transform(#[from] TransformError),
+
+    #[error(transparent)]
+    Extract(#[from] ExtractError),
 }
 
 #[derive(thiserror::Error, Debug)]

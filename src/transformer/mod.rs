@@ -6,7 +6,7 @@ pub mod resolver;
 
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use dataset::Dataset;
@@ -17,7 +17,7 @@ use crate::loggers::ProgressStream;
 use crate::readers::meta::Meta;
 
 
-pub fn transform(path: &PathBuf) -> Result<(), Error> {
+pub fn transform(path: &PathBuf) -> Result<String, Error> {
     let meta = meta(path)?;
 
     info!(mapping = meta.dataset.schema, "Creating triples database (TriG)");
@@ -25,6 +25,7 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
         &meta
             .dataset
             .schema
+            .clone()
             .expect("schema must be set in meta.toml for transformations"),
     )?;
 
@@ -42,27 +43,34 @@ pub fn transform(path: &PathBuf) -> Result<(), Error> {
 
     for entry in archive.entries_with_seek()? {
         let entry = entry?;
-        let header = entry.header();
+        let header = entry.header().clone();
 
         let size = header.size()?;
         let path = header.path()?;
+
+        let filename = path.file_name().map(|p| p.to_str().unwrap_or_default());
+        let ext = path.extension().unwrap_or_default().to_string_lossy();
         let name = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
 
-        if path.file_name().map(|p| p.to_str().unwrap_or_default()) == Some("meta.toml") {
+        if filename == Some("meta.toml") || ext == "etag" {
             continue;
         }
 
-        let message = format!("Loading {}", path.to_str().unwrap_or_default());
-        let stream = ProgressStream::new(entry, size as usize, &message);
+        let path = path.to_str();
+        info!(path, name, "Loading csv file");
+
+        let message = format!("Loading {}", path.unwrap_or_default());
+        // let input = flate2::read::GzDecoder::new(entry);
+        let input = brotli::Decompressor::new(entry, 4096);
+        // let stream = ProgressStream::new(input, size as usize, &message);
 
         // dataset.load_csv_oxi(stream, &name)?;
-        dataset.load_csv(stream, &name)?;
+        let rows = dataset.load_csv(input, &name)?;
+        info!(path, name, rows, "CSV loaded");
     }
 
-    // Ok(())
-
     info!("CSV files loaded into TriG dataset");
-    export(dataset)
+    export(dataset, meta)
 }
 
 
@@ -87,24 +95,24 @@ fn meta(path: &PathBuf) -> Result<Meta, Error> {
 }
 
 
-fn export(dataset: Dataset) -> Result<(), Error> {
+fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
     info!("Exporting TriG dataset as importable CSV files");
 
-    export_names(&dataset)?;
-    export_agents(&dataset)?;
-    export_publications(&dataset)?;
+    // export_names(&dataset)?;
+    // export_agents(&dataset)?;
+    // export_publications(&dataset)?;
 
-    export_organisms(&dataset)?;
-    export_collections(&dataset)?;
-    export_tissues(&dataset)?;
-    export_subsamples(&dataset)?;
-    export_extractions(&dataset)?;
-    export_libraries(&dataset)?;
-    export_sequencing_runs(&dataset)?;
+    // export_organisms(&dataset)?;
+    // export_collections(&dataset)?;
+    // export_tissues(&dataset)?;
+    // export_subsamples(&dataset)?;
+    // export_extractions(&dataset)?;
+    // export_libraries(&dataset)?;
+    // export_sequencing_runs(&dataset)?;
     export_assemblies(&dataset)?;
-    export_data_products(&dataset)?;
+    // export_data_products(&dataset)?;
 
-    Ok(())
+    package(meta)
 }
 
 
@@ -233,7 +241,11 @@ fn export_sequencing_runs(dataset: &Dataset) -> Result<(), Error> {
 fn export_assemblies(dataset: &Dataset) -> Result<(), Error> {
     let assemblies = models::assembly::get_all(&dataset)?;
 
-    let mut writer = csv::Writer::from_path("out/assemblies.csv")?;
+    let file = File::create("out/assemblies.csv.br")?;
+    let out = brotli::CompressorWriter::new(file, 8092, 7, 22);
+    let mut writer = csv::Writer::from_writer(out);
+
+    // let mut writer = csv::Writer::from_path("out/assemblies.csv")?;
     for assembly in assemblies {
         writer.serialize(assembly)?;
     }
@@ -251,4 +263,25 @@ fn export_data_products(dataset: &Dataset) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+
+pub fn package(meta: Meta) -> Result<String, Error> {
+    let filename = format!("{}-{}.tar", meta.dataset.name, meta.dataset.published_at.to_string());
+    info!(?filename, "Packaging export");
+
+    // create the toml file for the package metadata
+    let mut file = File::create("out/meta.toml")?;
+    let toml = toml::to_string_pretty(&meta).unwrap();
+    file.write_all(toml.as_bytes())?;
+
+    // create a tar archive containing everything the package needs
+    let file = File::create(&filename)?;
+    let mut archive = tar::Builder::new(file);
+
+    archive.append_path_with_name("out/meta.toml", "meta.toml")?;
+    archive.append_path_with_name("out/assemblies.csv.br", "assemblies.csv.br")?;
+
+    archive.finish()?;
+    Ok(filename)
 }

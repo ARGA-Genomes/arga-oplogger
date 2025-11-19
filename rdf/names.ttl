@@ -9,6 +9,7 @@
 model:bpa_tsi :models bpa:names.
 model:ncbiTaxonomy :models ncbi:names.
 model:taxonomy_sample :models ncbi:names.
+model:ncbi_taxonomy.csv :models ncbi:names.
 
 
 bpa:names

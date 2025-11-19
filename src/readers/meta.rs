@@ -1,10 +1,10 @@
 use arga_core::models;
 use chrono::Utc;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
     pub dataset: Dataset,
     pub changelog: Changelog,
@@ -12,7 +12,7 @@ pub struct Meta {
     pub collection: Collection,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dataset {
     pub id: String,
     pub name: String,
@@ -24,12 +24,12 @@ pub struct Dataset {
     pub schema: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Changelog {
     pub notes: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attribution {
     pub citation: String,
     pub source_url: String,
@@ -37,7 +37,7 @@ pub struct Attribution {
     pub rights_holder: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
     pub author: String,
