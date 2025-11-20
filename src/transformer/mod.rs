@@ -6,7 +6,7 @@ pub mod resolver;
 
 
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 
 use dataset::Dataset;
@@ -15,6 +15,17 @@ use tracing::info;
 use crate::errors::{Error, ParseError};
 use crate::loggers::ProgressStream;
 use crate::readers::meta::Meta;
+
+
+mod ttl {
+    pub const NAMES: &[u8] = include_bytes!("../../rdf/names.ttl");
+    pub const SPECIMENS: &[u8] = include_bytes!("../../rdf/specimens.ttl");
+    pub const SUBSAMPLES: &[u8] = include_bytes!("../../rdf/subsamples.ttl");
+    pub const EXTRACTIONS: &[u8] = include_bytes!("../../rdf/extractions.ttl");
+    pub const SEQUENCES: &[u8] = include_bytes!("../../rdf/sequences.ttl");
+    pub const DATA_PRODUCTS: &[u8] = include_bytes!("../../rdf/data_products.ttl");
+    pub const ARGA: &[u8] = include_bytes!("../../rdf/arga.ttl");
+}
 
 
 pub fn transform(path: &PathBuf) -> Result<String, Error> {
@@ -30,13 +41,21 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
     )?;
 
     // load the mapping definitions
-    dataset.load_trig_path("rdf/names.ttl")?;
-    dataset.load_trig_path("rdf/specimens.ttl")?;
-    dataset.load_trig_path("rdf/subsamples.ttl")?;
-    dataset.load_trig_path("rdf/extractions.ttl")?;
-    dataset.load_trig_path("rdf/sequences.ttl")?;
-    dataset.load_trig_path("rdf/data_products.ttl")?;
-    dataset.load_trig_path("rdf/arga.ttl")?;
+    dataset.load_trig(BufReader::new(ttl::NAMES))?;
+    dataset.load_trig(BufReader::new(ttl::SPECIMENS))?;
+    dataset.load_trig(BufReader::new(ttl::SUBSAMPLES))?;
+    dataset.load_trig(BufReader::new(ttl::EXTRACTIONS))?;
+    dataset.load_trig(BufReader::new(ttl::SEQUENCES))?;
+    dataset.load_trig(BufReader::new(ttl::DATA_PRODUCTS))?;
+    dataset.load_trig(BufReader::new(ttl::ARGA))?;
+
+    // dataset.load_trig_path("rdf/names.ttl")?;
+    // dataset.load_trig_path("rdf/specimens.ttl")?;
+    // dataset.load_trig_path("rdf/subsamples.ttl")?;
+    // dataset.load_trig_path("rdf/extractions.ttl")?;
+    // dataset.load_trig_path("rdf/sequences.ttl")?;
+    // dataset.load_trig_path("rdf/data_products.ttl")?;
+    // dataset.load_trig_path("rdf/arga.ttl")?;
 
     let file = File::open(path)?;
     let mut archive = tar::Archive::new(file);
