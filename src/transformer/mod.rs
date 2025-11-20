@@ -62,10 +62,10 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
         let message = format!("Loading {}", path.unwrap_or_default());
         // let input = flate2::read::GzDecoder::new(entry);
         let input = brotli::Decompressor::new(entry, 4096);
-        // let stream = ProgressStream::new(input, size as usize, &message);
+        let stream = ProgressStream::new(input, size as usize, &message);
 
         // dataset.load_csv_oxi(stream, &name)?;
-        let rows = dataset.load_csv(input, &name)?;
+        let rows = dataset.load_csv(stream, &name)?;
         info!(path, name, rows, "CSV loaded");
     }
 

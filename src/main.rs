@@ -21,6 +21,7 @@ use nomenclatural_acts::NomenclaturalActs;
 use readers::plazi;
 use sequences::Sequences;
 use taxonomic_acts::TaxonomicActs;
+use tracing::info;
 use tracing_subscriber::field::MakeExt;
 use tracing_subscriber::fmt::format::FmtSpan;
 
@@ -65,6 +66,9 @@ pub enum Commands {
 
     #[command(subcommand)]
     Extract(ExtractCommand),
+
+    #[command(subcommand)]
+    Etl(EtlCommand),
 }
 
 #[derive(Args)]
@@ -163,6 +167,12 @@ pub enum ExtractCommand {
 }
 
 
+#[derive(clap::Subcommand)]
+pub enum EtlCommand {
+    Genbank,
+}
+
+
 fn main() -> Result<(), Error> {
     dotenvy::dotenv().ok();
     // tracing_subscriber::fmt::init();
@@ -170,7 +180,7 @@ fn main() -> Result<(), Error> {
         .map_fmt_fields(|f| f.debug_alt())
         .with_span_events(FmtSpan::CLOSE)
         .with_target(false)
-        .with_max_level(tracing::Level::ERROR)
+        .with_max_level(tracing::Level::INFO)
         .init();
 
     set_default_instrumentation(database::simple_logger).expect("Failed to setup database instrumentation");
@@ -289,6 +299,18 @@ fn main() -> Result<(), Error> {
                 println!("{}", filename);
             }
         }
+
+        Commands::Etl(cmd) => match cmd {
+            EtlCommand::Genbank => match crate::extractor::genbank::extract()? {
+                None => info!("No updates found"),
+                Some(extract) => {
+                    info!("Found update. Transforming and loading");
+                    let transform = crate::transformer::transform(&PathBuf::from(extract))?;
+                    let archive = archive::Archive::new(PathBuf::from(transform));
+                    archive.import()?;
+                }
+            },
+        },
     }
 
     Ok(())
