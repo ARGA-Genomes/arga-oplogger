@@ -224,7 +224,13 @@ impl Dataset {
         let source = Iri::new(source).map_err(TransformError::from)?;
         let schema = Namespace::new(self.schema.as_str()).map_err(TransformError::from)?;
 
-        let mut reader = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(reader);
+        let mut reader = if source_model == "assembly_summary_genbank.txt" {
+            csv::ReaderBuilder::new().delimiter(b'\t').from_reader(reader)
+        }
+        else {
+            csv::ReaderBuilder::new().from_reader(reader)
+        };
+
         let header_row = reader.headers()?.to_owned();
 
         // build a header map to get a specific header iri from the column index

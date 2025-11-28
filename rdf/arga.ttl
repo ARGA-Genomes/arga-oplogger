@@ -229,7 +229,14 @@
               :has fields:citation;
               :has fields:source_url.
 
-
 <library> :has fields:extract_id;
           :has fields:library_id;
           :has fields:pcr_replicates.
+
+
+<annotation> :has fields:assembly_id;
+             :has fields:name;
+             :has fields:provider;
+             :has fields:event_date;
+             :has fields:number_of_genes;
+             :has fields:number_of_proteins.

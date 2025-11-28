@@ -103,12 +103,15 @@ pub fn process() -> Result<(), ExtractError> {
     let output = brotli::CompressorWriter::new(file, 8092, 7, 22);
     let mut writer = csv::WriterBuilder::new().from_writer(output);
 
-    writer.write_record(&["taxon_id", "canonical_name", "rank"]).unwrap();
+    writer
+        .write_record(&["taxon_id", "scientific_name", "canonical_name", "rank"])
+        .unwrap();
 
     for node in taxonomy.descendants(root).unwrap() {
         writer
             .write_record(&[
-                &node.to_string(),
+                taxonomy.from_internal_index(node).unwrap(),
+                taxonomy.name(node).unwrap(),
                 taxonomy.name(node).unwrap(),
                 taxonomy.rank(node).unwrap().to_ncbi_rank(),
             ])

@@ -522,3 +522,12 @@ pub fn str_to_content_type(value: &str) -> Result<Option<SourceContentType>, Par
         val => Err(ParseError::InvalidValue(val.to_string())),
     }
 }
+
+pub fn parse_string_opt<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: std::str::FromStr,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    Ok(s.parse::<T>().ok())
+}

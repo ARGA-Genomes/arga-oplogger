@@ -24,6 +24,7 @@ mod ttl {
     pub const EXTRACTIONS: &[u8] = include_bytes!("../../rdf/extractions.ttl");
     pub const SEQUENCES: &[u8] = include_bytes!("../../rdf/sequences.ttl");
     pub const DATA_PRODUCTS: &[u8] = include_bytes!("../../rdf/data_products.ttl");
+    pub const ANNOTATIONS: &[u8] = include_bytes!("../../rdf/annotations.ttl");
     pub const ARGA: &[u8] = include_bytes!("../../rdf/arga.ttl");
 }
 
@@ -47,6 +48,7 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
     dataset.load_trig(BufReader::new(ttl::EXTRACTIONS))?;
     dataset.load_trig(BufReader::new(ttl::SEQUENCES))?;
     dataset.load_trig(BufReader::new(ttl::DATA_PRODUCTS))?;
+    dataset.load_trig(BufReader::new(ttl::ANNOTATIONS))?;
     dataset.load_trig(BufReader::new(ttl::ARGA))?;
 
     // dataset.load_trig_path("rdf/names.ttl")?;
@@ -117,7 +119,7 @@ fn meta(path: &PathBuf) -> Result<Meta, Error> {
 fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
     info!("Exporting TriG dataset as importable CSV files");
 
-    // export_names(&dataset)?;
+    export_names(&dataset)?;
     // export_agents(&dataset)?;
     // export_publications(&dataset)?;
 
@@ -130,6 +132,7 @@ fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
     // export_sequencing_runs(&dataset)?;
     export_assemblies(&dataset)?;
     // export_data_products(&dataset)?;
+    export_annotations(&dataset)?;
 
     package(meta)
 }
@@ -284,6 +287,21 @@ fn export_data_products(dataset: &Dataset) -> Result<(), Error> {
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
+fn export_annotations(dataset: &Dataset) -> Result<(), Error> {
+    let rows = models::annotation::get_all(&dataset)?;
+
+    let file = File::create("out/annotations.csv.br")?;
+    let out = brotli::CompressorWriter::new(file, 8092, 7, 22);
+    let mut writer = csv::Writer::from_writer(out);
+
+    for row in rows {
+        writer.serialize(row)?;
+    }
+
+    Ok(())
+}
+
 
 pub fn package(meta: Meta) -> Result<String, Error> {
     let filename = format!("{}-{}.tar", meta.dataset.name, meta.dataset.published_at.to_string());
@@ -300,6 +318,7 @@ pub fn package(meta: Meta) -> Result<String, Error> {
 
     archive.append_path_with_name("out/meta.toml", "meta.toml")?;
     archive.append_path_with_name("out/assemblies.csv.br", "assemblies.csv.br")?;
+    archive.append_path_with_name("out/annotations.csv.br", "annotations.csv.br")?;
 
     archive.finish()?;
     Ok(filename)

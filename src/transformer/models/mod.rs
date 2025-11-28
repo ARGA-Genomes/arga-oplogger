@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod annotation;
 pub mod assembly;
 pub mod collecting;
 pub mod data_products;

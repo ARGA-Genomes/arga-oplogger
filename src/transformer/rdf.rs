@@ -1452,6 +1452,56 @@ impl From<(DataProduct, Literal)> for DataProductField {
 }
 
 
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Annotation {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:assembly_id")]
+    AssemblyId,
+
+    #[iri("fields:name")]
+    Name,
+    #[iri("fields:provider")]
+    Provider,
+    #[iri("fields:event_date")]
+    EventDate,
+    #[iri("fields:number_of_genes")]
+    NumberOfGenes,
+    #[iri("fields:number_of_proteins")]
+    NumberOfProteins,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum AnnotationField {
+    EntityId(String),
+    AssemblyId(String),
+
+    Name(String),
+    Provider(String),
+    EventDate(String),
+    NumberOfGenes(String),
+    NumberOfProteins(String),
+}
+
+
+impl From<(Annotation, Literal)> for AnnotationField {
+    fn from(source: (Annotation, Literal)) -> Self {
+        use Annotation::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (AssemblyId, Literal::String(value)) => Self::AssemblyId(value),
+            (Name, Literal::String(value)) => Self::Name(value),
+            (Provider, Literal::String(value)) => Self::Provider(value),
+            (EventDate, Literal::String(value)) => Self::EventDate(value),
+            (NumberOfGenes, Literal::String(value)) => Self::NumberOfGenes(value),
+            (NumberOfProteins, Literal::String(value)) => Self::NumberOfProteins(value),
+        }
+    }
+}
+
+
 pub fn try_from_term<'a, T>(value: &'a SimpleTerm<'static>) -> Result<T, TransformError>
 where
     T: TryFrom<&'a iref::Iri>,

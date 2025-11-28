@@ -28,7 +28,8 @@ ncbi:names
   <entity_id>                  :hash    <scientific_name>;
                                :when << <rank> :is "species" >>.
 
-  <taxon_id>                   :same ncbi:tax_id.
-  <canonical_name>             :same ncbi:scientific_name.
+  <taxon_id>                   :same ncbi:taxon_id.
+  <canonical_name>             :same ncbi:canonical_name.
   <scientific_name>            :same ncbi:scientific_name.
+  <rank>                       :same ncbi:rank.
 }

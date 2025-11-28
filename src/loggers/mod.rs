@@ -1,6 +1,7 @@
 pub mod accessions;
 pub mod admin_media;
 pub mod agents;
+pub mod annotations;
 pub mod assemblies;
 pub mod collections;
 pub mod data_products;
