@@ -1,0 +1,19 @@
+meta {
+  name: current packages
+  type: http
+  seq: 1
+}
+
+get {
+  url: https://data.bioplatforms.com/api/3/action/current_package_list_with_resources?limit=5
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 5
+}
+
+settings {
+  encodeUrl: true
+}
