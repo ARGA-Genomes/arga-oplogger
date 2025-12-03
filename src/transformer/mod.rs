@@ -121,20 +121,20 @@ fn meta(path: &PathBuf) -> Result<Meta, Error> {
 fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
     info!("Exporting TriG dataset as importable CSV files");
 
-    export_compressed(models::name::get_all(&dataset)?, "out/names.csv.br")?;
-    export_compressed(models::agent::get_all(&dataset)?, "out/agents.csv.br")?;
-    export_compressed(models::publications::get_all(&dataset)?, "out/publications.csv.br")?;
+    export_compressed(models::name::get_all(&dataset)?, "names.csv.br")?;
+    export_compressed(models::agent::get_all(&dataset)?, "agents.csv.br")?;
+    export_compressed(models::publications::get_all(&dataset)?, "publications.csv.br")?;
 
-    export_compressed(models::organism::get_all(&dataset)?, "out/organisms.csv.br")?;
-    export_compressed(models::collecting::get_all(&dataset)?, "out/collections.csv.br")?;
-    export_compressed(models::tissue::get_all(&dataset)?, "out/tissues.csv.br")?;
-    export_compressed(models::subsample::get_all(&dataset)?, "out/subsamples.csv.br")?;
-    export_compressed(models::extraction::get_all(&dataset)?, "out/extractions.csv.br")?;
-    export_compressed(models::library::get_all(&dataset)?, "out/libraries.csv.br")?;
-    export_compressed(models::sequencing_run::get_all(&dataset)?, "out/sequencing_runs.csv.br")?;
-    export_compressed(models::assembly::get_all(&dataset)?, "out/assemblies.csv.br")?;
-    export_compressed(models::data_products::get_all(&dataset)?, "out/data_products.csv.br")?;
-    export_compressed(models::annotation::get_all(&dataset)?, "out/annotations.csv.br")?;
+    export_compressed(models::organism::get_all(&dataset)?, "organisms.csv.br")?;
+    export_compressed(models::collecting::get_all(&dataset)?, "collections.csv.br")?;
+    export_compressed(models::tissue::get_all(&dataset)?, "tissues.csv.br")?;
+    export_compressed(models::subsample::get_all(&dataset)?, "subsamples.csv.br")?;
+    export_compressed(models::extraction::get_all(&dataset)?, "extractions.csv.br")?;
+    export_compressed(models::library::get_all(&dataset)?, "libraries.csv.br")?;
+    export_compressed(models::sequencing_run::get_all(&dataset)?, "sequencing_runs.csv.br")?;
+    export_compressed(models::assembly::get_all(&dataset)?, "assemblies.csv.br")?;
+    export_compressed(models::data_products::get_all(&dataset)?, "data_products.csv.br")?;
+    export_compressed(models::annotation::get_all(&dataset)?, "annotations.csv.br")?;
 
     package(meta)
 }
@@ -160,7 +160,7 @@ pub fn package(meta: Meta) -> Result<String, Error> {
     info!(?filename, "Packaging export");
 
     // create the toml file for the package metadata
-    let mut file = File::create("out/meta.toml")?;
+    let mut file = File::create("meta.toml")?;
     let toml = toml::to_string_pretty(&meta).unwrap();
     file.write_all(toml.as_bytes())?;
 
@@ -168,7 +168,7 @@ pub fn package(meta: Meta) -> Result<String, Error> {
     let file = File::create(&filename)?;
     let mut archive = tar::Builder::new(file);
 
-    archive.append_path_with_name("out/meta.toml", "meta.toml")?;
+    archive.append_path_with_name("meta.toml", "meta.toml")?;
     append_if_exists(&mut archive, "names.csv.br")?;
     append_if_exists(&mut archive, "agents.csv.br")?;
     append_if_exists(&mut archive, "publications.csv.br")?;
@@ -188,10 +188,8 @@ pub fn package(meta: Meta) -> Result<String, Error> {
 }
 
 fn append_if_exists(archive: &mut tar::Builder<File>, filename: &str) -> Result<(), Error> {
-    let path = format!("out/{filename}");
-
-    if std::path::Path::new(&path).exists() {
-        archive.append_path_with_name(path, filename)?;
+    if std::path::Path::new(&filename).exists() {
+        archive.append_path_with_name(filename, filename)?;
     }
 
     Ok(())
