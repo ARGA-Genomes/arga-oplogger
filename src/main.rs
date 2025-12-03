@@ -164,6 +164,7 @@ pub enum PlaziCommand {
 
 #[derive(clap::Subcommand)]
 pub enum ExtractCommand {
+    Bioplatforms,
     Genbank,
     NcbiTaxonomy,
 }
@@ -172,6 +173,7 @@ pub enum ExtractCommand {
 #[derive(clap::Subcommand)]
 pub enum EtlCommand {
     Genbank,
+    Bioplatforms,
 }
 
 
@@ -294,6 +296,7 @@ fn main() -> Result<(), Error> {
 
         Commands::Extract(cmd) => {
             let outfile = match cmd {
+                ExtractCommand::Bioplatforms => crate::extractor::bpa::extract()?,
                 ExtractCommand::Genbank => crate::extractor::genbank::extract()?,
                 ExtractCommand::NcbiTaxonomy => crate::extractor::ncbi_taxonomy::extract()?,
             };
@@ -305,6 +308,15 @@ fn main() -> Result<(), Error> {
 
         Commands::Etl(cmd) => match cmd {
             EtlCommand::Genbank => match crate::extractor::genbank::extract()? {
+                None => info!("No updates found"),
+                Some(extract) => {
+                    info!("Found update. Transforming and loading");
+                    let transform = crate::transformer::transform(&PathBuf::from(extract))?;
+                    let archive = archive::Archive::new(PathBuf::from(transform));
+                    archive.import()?;
+                }
+            },
+            EtlCommand::Bioplatforms => match crate::extractor::bpa::extract()? {
                 None => info!("No updates found"),
                 Some(extract) => {
                     info!("Found update. Transforming and loading");

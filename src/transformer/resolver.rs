@@ -16,6 +16,7 @@ use crate::transformer::rdf::{
     Mapping,
     MappingCondition,
     Rdfs,
+    ToIri,
     ToIriOwned,
     try_from_iri,
 };
@@ -36,6 +37,7 @@ impl Resolver<'_> {
     }
 
     /// Load all records within the specified scope and resolve the specified fields
+    #[tracing::instrument(skip_all)]
     pub fn resolve<'a, T, R>(
         &self,
         fields: &'a [T],
@@ -46,7 +48,7 @@ impl Resolver<'_> {
         R: From<(T, Literal)> + Clone,
         &'a iref::Iri: From<&'a T>,
     {
-        info!("Resolving fields");
+        info!(?fields, ?scope, "Resolving fields");
 
         // get the iri for all fields to resolve
         let field_iris: Vec<&iref::Iri> = fields.iter().map(|f| f.into()).collect();
@@ -81,7 +83,6 @@ impl Resolver<'_> {
                         }
                         Map::Combines(iris) => {
                             let mut to_combine: Vec<&str> = Vec::new();
-
                             for iri in iris {
                                 // a field can be mapped to multiple source fields so we
                                 // need to handle that scenario here. this can lead to pretty
@@ -141,6 +142,7 @@ impl Resolver<'_> {
     }
 
     /// Get records container the specified fields in the specified models
+    #[tracing::instrument(skip_all)]
     pub fn records(&self, fields: &[&iref::Iri], scope: &[&iref::Iri]) -> Result<RecordMap, TransformError> {
         let map = self.field_map(fields, scope)?;
 
@@ -290,6 +292,7 @@ impl Resolver<'_> {
     }
 
     /// Get the field mapping for the specified fields
+    #[tracing::instrument(skip_all)]
     pub fn field_map(&self, fields: &[&iref::Iri], scope: &[&iref::Iri]) -> Result<FieldMap, TransformError> {
         let mut resolved = FieldMap::new();
 
@@ -312,6 +315,10 @@ impl Resolver<'_> {
             .quads_matching(terms.as_slice(), Any, Any, scope_terms.as_slice())
         {
             let (g, [s, p, o]) = quad?;
+            let graph = match g {
+                Some(SimpleTerm::Iri(iri_ref)) => iri_ref.to_iri()?,
+                _ => unimplemented!(),
+            };
 
             // parse the predicate as a valid mapping term
             let predicate: Mapping = p.try_into()?;
@@ -333,7 +340,7 @@ impl Resolver<'_> {
                 Mapping::HashFirst => match o {
                     SimpleTerm::BlankNode(bnode_id) => {
                         let mut iris = Vec::new();
-                        self.collect_iris(&mut iris, bnode_id)?;
+                        self.collect_iris(&mut iris, bnode_id, graph)?;
                         Map::HashFirst(iris)
                     }
                     _ => unimplemented!(),
@@ -342,7 +349,7 @@ impl Resolver<'_> {
                 Mapping::Combines => match o {
                     SimpleTerm::BlankNode(bnode_id) => {
                         let mut iris = Vec::new();
-                        self.collect_iris(&mut iris, bnode_id)?;
+                        self.collect_iris(&mut iris, bnode_id, graph)?;
                         Map::Combines(iris)
                     }
                     _ => unimplemented!(),
@@ -401,12 +408,18 @@ impl Resolver<'_> {
     }
 
     /// Collect all the IRIs in a linked list specified by rdfs
+    #[tracing::instrument(skip_all)]
     pub fn collect_iris(
         &self,
         iris: &mut Vec<iref::IriBuf>,
         node: &BnodeId<MownStr<'_>>,
+        graph: &iref::Iri,
     ) -> Result<(), TransformError> {
-        for quad in self.dataset.source.quads_matching([node], Any, Any, Any) {
+        for quad in self
+            .dataset
+            .source
+            .quads_matching([node], Any, Any, GraphIriName(&graph))
+        {
             let (_g, [_s, p, o]) = quad?;
             let pred: Rdfs = p.try_into()?;
 
@@ -417,7 +430,7 @@ impl Resolver<'_> {
                 },
 
                 Rdfs::Rest => match o {
-                    SimpleTerm::BlankNode(bnode_id) => self.collect_iris(iris, bnode_id)?,
+                    SimpleTerm::BlankNode(bnode_id) => self.collect_iris(iris, bnode_id, graph)?,
                     SimpleTerm::Iri(iri_ref) => match try_from_iri::<_, Rdfs>(iri_ref)? {
                         Rdfs::Nil => return Ok(()),
                         _ => unimplemented!(),
@@ -440,6 +453,8 @@ pub fn resolve_field_terms<'a>(
     map: &'a FieldMap,
 ) -> Result<std::collections::HashSet<SimpleTerm<'a>>, TransformError> {
     let mut terms = std::collections::HashSet::new();
+
+    debug!(?map, ?fields, "resolving field terms");
 
     for field_iri in fields {
         // get all the mapping referenced by the field
@@ -518,6 +533,25 @@ impl<'a> GraphNameMatcher for GraphIri<'a> {
             // only include matching graph names
             Some(t) => match t.as_simple() {
                 SimpleTerm::Iri(iri) => self.0.contains(&iri.as_str()),
+                _ => false,
+            },
+            // always include the default graph
+            None => false,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct GraphIriName<'a>(&'a iref::Iri);
+
+impl<'a> GraphNameMatcher for GraphIriName<'a> {
+    type Term = SimpleTerm<'static>;
+
+    fn matches<T2: Term + ?Sized>(&self, graph_name: GraphName<&T2>) -> bool {
+        match graph_name {
+            // only include matching graph names
+            Some(t) => match t.as_simple() {
+                SimpleTerm::Iri(iri) => self.0.eq(&iri.as_str()),
                 _ => false,
             },
             // always include the default graph

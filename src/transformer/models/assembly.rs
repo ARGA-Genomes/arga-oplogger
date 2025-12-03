@@ -81,6 +81,8 @@ pub fn get_all(dataset: &Dataset) -> Result<Vec<Assembly>, Error> {
             ComputationalInfrastructure,
             SystemUsed,
             AssemblyN50,
+            CanonicalName,
+            ScientificNameAuthorship,
         ],
         &scope,
     )?;

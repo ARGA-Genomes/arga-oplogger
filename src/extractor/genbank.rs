@@ -15,10 +15,6 @@ const ASSEMBLY_SUMMARY_FILE: &'static str = "assembly_summary_genbank.txt";
 
 
 pub fn extract() -> Result<Option<String>, ExtractError> {
-    // package(meta("", "Wed, 19 Nov 2025 06:10:54 GMT")?)?;
-    // return Ok(None);
-
-
     let agent: Agent = Agent::new_with_defaults();
     let last_etag = etag()?;
 

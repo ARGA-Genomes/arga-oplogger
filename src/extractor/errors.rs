@@ -3,6 +3,9 @@ pub enum ExtractError {
     #[error("The request failed")]
     RequestFailed,
 
+    #[error("Unexpected response structure")]
+    UnknownResponse,
+
     #[error(transparent)]
     File(#[from] std::io::Error),
 
@@ -14,4 +17,10 @@ pub enum ExtractError {
 
     #[error(transparent)]
     TomlSerialize(#[from] toml::ser::Error),
+
+    #[error(transparent)]
+    JsonSerialize(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Http(#[from] ureq::Error),
 }

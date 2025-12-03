@@ -32,6 +32,12 @@ pub enum TransformError {
 
     #[error(transparent)]
     Resolve(#[from] ResolveError),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 

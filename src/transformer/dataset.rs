@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 
 use iref::IriBuf;
 use rayon::prelude::*;
@@ -48,9 +48,10 @@ impl Dataset {
         // also include any source model data based on the model mapping in the schema
         for model in models {
             for iri in self.get_source_models(&model).unwrap() {
-                iris.push(format!("{iri}/"));
+                iris.push(format!("{iri}"));
             }
         }
+
         iris
     }
 
@@ -272,16 +273,52 @@ impl Dataset {
         Ok(total)
     }
 
-    pub fn get_source_models(&self, model: &str) -> Result<Vec<Iri<String>>, TransformError> {
+    pub fn load_jsonl<R: std::io::Read>(&mut self, reader: R, source: &str) -> Result<usize, TransformError> {
+        // get the source data namespace for all loaded data
+        let source = format!("http://arga.org.au/source/{source}");
+        let source = Iri::new(source).map_err(TransformError::from)?;
+        let schema = Namespace::new(self.schema.as_str()).map_err(TransformError::from)?;
+
+        let buf = BufReader::new(reader);
+        let mut total = 0;
+
+        for (record_index, line) in buf.lines().enumerate() {
+            let record = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&line?)?;
+            total = total + 1;
+
+            for (key, value) in record {
+                let header = schema.get(&key)?;
+
+                match value {
+                    serde_json::Value::Bool(value) => continue,
+                    serde_json::Value::Number(value) => continue,
+                    serde_json::Value::String(value) => {
+                        if value.trim().is_empty() {
+                            continue;
+                        }
+                        self.source
+                            .insert(record_index, header, value.as_str(), Some(&source))?;
+                    }
+                    serde_json::Value::Array(values) => continue,
+                    serde_json::Value::Object(map) => continue,
+                    serde_json::Value::Null => continue,
+                }
+            }
+        }
+
+        Ok(total)
+    }
+
+    fn get_source_models(&self, model: &str) -> Result<Vec<Iri<String>>, TransformError> {
         let base = Iri::new("http://arga.org.au/schemas/mapping/")?.to_base();
         let mapping = Namespace::new(base)?;
-        let predicate = mapping.get("models")?;
+        let predicate = mapping.get("transforms_into")?;
 
         let prefix = Iri::new(self.map.as_str())?;
         let namespace = Namespace::new(prefix)?;
         let model = namespace.get(model)?;
 
-        debug!(?predicate, ?model, "getting source models");
+        info!(?predicate, ?model, "getting sources");
 
         let mut sources = Vec::new();
         for quad in self.source.quads_matching(Any, [predicate], [model], Any) {
@@ -300,7 +337,7 @@ impl Dataset {
 
         let base = Iri::new("http://arga.org.au/schemas/mapping/")?.to_base();
         let mapping = Namespace::new(base)?;
-        let predicate = mapping.get("models")?;
+        let predicate = mapping.get("transforms_into")?;
 
         let mut sources = Vec::new();
         for quad in self
@@ -309,7 +346,7 @@ impl Dataset {
         {
             let (_g, [s, _p, _o]) = quad?;
             match s {
-                SimpleTerm::Iri(iri) => sources.push(iref::IriBuf::new(format!("{0}/", iri.to_string()))?),
+                SimpleTerm::Iri(iri) => sources.push(iref::IriBuf::new(format!("{0}", iri.to_string()))?),
                 _ => {}
             };
         }
