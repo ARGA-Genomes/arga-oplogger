@@ -26,7 +26,9 @@ source:assembly_summary_genbank.txt :discards_lines  1;
                                     :transforms_into ncbi:assembly.
 
 source:bpa.jsonl :format formats:jsonl;
-                 :transforms_into bpa:library.
+                 :transforms_into bpa:sequencing_runs;
+                 :transforms_into bpa:library;
+                 :transforms_into bpa:assembly.
 
 
 ncbi:sequence_runs
@@ -197,7 +199,7 @@ bpa:assembly {
   # assembly_method_version; assembly_method_version_or_date
   <method_version>        :same bpa:assembly_method_version.
   <method_link>           :same bpa:version_release_link.
-  <size>                  :same bpa:genome_size.
+  # <size>                  :same bpa:genome_size.
   <minimum_gap_length>    :same bpa:min_gap_length.
   <completeness>          :same bpa:completion_score.
   <completeness_method>   :same bpa:completion_score_method.
@@ -205,7 +207,7 @@ bpa:assembly {
   <reference_genome_used> :same bpa:reference_genome.
   <reference_genome_link> :same bpa:reference_genome_link.
   # n_scaffolds; no_scaffolds
-  <number_of_scaffolds>             :same bpa:n_scaffolds.
+  # <number_of_scaffolds>             :same bpa:n_scaffolds.
   <genome_coverage>                 :same bpa:genome_coverage.
   <hybrid>                          :same bpa:hybrid.
   <hybrid_information>              :same bpa:hybrid_details.

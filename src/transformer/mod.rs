@@ -26,6 +26,7 @@ mod ttl {
     pub const SEQUENCES: &[u8] = include_bytes!("../../rdf/sequences.ttl");
     pub const DATA_PRODUCTS: &[u8] = include_bytes!("../../rdf/data_products.ttl");
     pub const ANNOTATIONS: &[u8] = include_bytes!("../../rdf/annotations.ttl");
+    pub const DEPOSITIONS: &[u8] = include_bytes!("../../rdf/depositions.ttl");
     pub const ARGA: &[u8] = include_bytes!("../../rdf/arga.ttl");
 }
 
@@ -50,6 +51,7 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
     dataset.load_trig(BufReader::new(ttl::SEQUENCES))?;
     dataset.load_trig(BufReader::new(ttl::DATA_PRODUCTS))?;
     dataset.load_trig(BufReader::new(ttl::ANNOTATIONS))?;
+    dataset.load_trig(BufReader::new(ttl::DEPOSITIONS))?;
     dataset.load_trig(BufReader::new(ttl::ARGA))?;
 
     // dataset.load_trig_path("rdf/names.ttl")?;
@@ -135,6 +137,7 @@ fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
     export_compressed(models::assembly::get_all(&dataset)?, "assemblies.csv.br")?;
     export_compressed(models::data_products::get_all(&dataset)?, "data_products.csv.br")?;
     export_compressed(models::annotation::get_all(&dataset)?, "annotations.csv.br")?;
+    export_compressed(models::deposition::get_all(&dataset)?, "depositions.csv.br")?;
 
     package(meta)
 }
@@ -182,6 +185,7 @@ pub fn package(meta: Meta) -> Result<String, Error> {
     append_if_exists(&mut archive, "assemblies.csv.br")?;
     append_if_exists(&mut archive, "data_products.csv.br")?;
     append_if_exists(&mut archive, "annotations.csv.br")?;
+    append_if_exists(&mut archive, "depositions.csv.br")?;
 
     archive.finish()?;
     Ok(filename)

@@ -1502,6 +1502,47 @@ impl From<(Annotation, Literal)> for AnnotationField {
 }
 
 
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Deposition {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:assembly_id")]
+    AssemblyId,
+
+    #[iri("fields:event_date")]
+    EventDate,
+    #[iri("fields:url")]
+    Url,
+    #[iri("fields:institution")]
+    Institution,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum DepositionField {
+    EntityId(String),
+    AssemblyId(String),
+
+    EventDate(String),
+    Url(String),
+    Institution(String),
+}
+
+
+impl From<(Deposition, Literal)> for DepositionField {
+    fn from(source: (Deposition, Literal)) -> Self {
+        use Deposition::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (AssemblyId, Literal::String(value)) => Self::AssemblyId(value),
+            (EventDate, Literal::String(value)) => Self::EventDate(value),
+            (Url, Literal::String(value)) => Self::Url(value),
+            (Institution, Literal::String(value)) => Self::Institution(value),
+        }
+    }
+}
+
 pub fn try_from_term<'a, T>(value: &'a SimpleTerm<'static>) -> Result<T, TransformError>
 where
     T: TryFrom<&'a iref::Iri>,

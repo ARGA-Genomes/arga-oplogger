@@ -1,0 +1,18 @@
+@base <http://arga.org.au/schemas/fields/>.
+
+@prefix :       <http://arga.org.au/schemas/mapping/>.
+@prefix model:  <http://arga.org.au/model/>.
+@prefix ncbi:   <http://arga.org.au/schemas/maps/ncbi/>.
+
+model:assembly_summary_genbank.txt :models ncbi:deposition.
+
+
+ncbi:deposition
+{
+  <entity_id>   :hash ncbi:\#assembly_accession.
+  <assembly_id> :same ncbi:\#assembly_accession.
+
+  <event_date>  :same ncbi:seq_rel_date.
+  <url>         :same ncbi:ftp_path.
+  <institution> :same ncbi:asm_submitter.
+}
