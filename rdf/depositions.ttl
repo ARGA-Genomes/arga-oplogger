@@ -1,10 +1,12 @@
 @base <http://arga.org.au/schemas/fields/>.
 
-@prefix :       <http://arga.org.au/schemas/mapping/>.
-@prefix model:  <http://arga.org.au/model/>.
-@prefix ncbi:   <http://arga.org.au/schemas/maps/ncbi/>.
+@prefix :        <http://arga.org.au/schemas/mapping/>.
+@prefix source:  <http://arga.org.au/source/>.
+@prefix formats: <http://arga.org.au/source/formats/>.
+@prefix ncbi:    <http://arga.org.au/schemas/maps/ncbi/>.
 
-model:assembly_summary_genbank.txt :models ncbi:deposition.
+source:assembly_summary_genbank.txt :format          formats:tsv;
+                                    :transforms_into ncbi:deposition.
 
 
 ncbi:deposition

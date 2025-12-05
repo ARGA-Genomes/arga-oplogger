@@ -1,19 +1,15 @@
 @base <http://arga.org.au/schemas/fields/>.
 
 @prefix :               <http://arga.org.au/schemas/mapping/>.
-@prefix model:          <http://arga.org.au/model/>.
 @prefix source:         <http://arga.org.au/source/>.
 @prefix formats:        <http://arga.org.au/source/formats/>.
 @prefix bpa:            <http://arga.org.au/schemas/maps/bpa/>.
 @prefix ncbi:           <http://arga.org.au/schemas/maps/ncbi/>.
 
 
-model:bpa_tsi :models bpa:names.
-model:ncbiTaxonomy :models ncbi:names.
-model:taxonomy_sample :models ncbi:names.
-model:ncbi_taxonomy.csv :models ncbi:names.
-
-model:bpa.jsonl :models bpa:names.
+source:ncbi_taxonomy.csv :discards_lines  1;
+                                    :format          formats:tsv;
+                                    :transforms_into ncbi:names.
 
 source:bpa.jsonl :format formats:jsonl;
                  :transforms_into bpa:names.

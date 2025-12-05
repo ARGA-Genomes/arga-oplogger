@@ -30,6 +30,8 @@ pub enum MaterializedView {
     TaxaTree,
     TaxaTreeStats,
     Species,
+
+    DepositionEntities,
 }
 
 impl std::fmt::Display for MaterializedView {
@@ -40,6 +42,8 @@ impl std::fmt::Display for MaterializedView {
             MaterializedView::TaxaTree => "taxa_tree",
             MaterializedView::TaxaTreeStats => "taxa_tree_stats",
             MaterializedView::Species => "species",
+
+            MaterializedView::DepositionEntities => "deposition_entities",
         })
     }
 }

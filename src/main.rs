@@ -146,6 +146,8 @@ pub enum UpdateCommand {
     DataProducts,
     /// Update annotations with the reduced logs
     Annotations,
+    /// Update depositions with the reduced logs
+    Depositions,
 }
 
 #[derive(clap::Subcommand)]
@@ -281,6 +283,7 @@ fn main() -> Result<(), Error> {
             UpdateCommand::Assemblies => assemblies::update()?,
             UpdateCommand::DataProducts => data_products::update()?,
             UpdateCommand::Annotations => annotations::update()?,
+            UpdateCommand::Depositions => depositions::update()?,
         },
 
         Commands::Link(cmd) => match cmd {

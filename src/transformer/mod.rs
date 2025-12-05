@@ -89,8 +89,8 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
         let stream = ProgressStream::new(input, size as usize, &message);
 
         // dataset.load_csv_oxi(stream, &name)?;
-        // let rows = dataset.load_csv(stream, &name)?;
-        let rows = dataset.load_jsonl(stream, &name)?;
+        let rows = dataset.load(stream, &name)?;
+        // let rows = dataset.load_jsonl(stream, &name)?;
         info!(path, name, rows, "CSV loaded");
     }
 

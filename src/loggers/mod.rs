@@ -6,6 +6,7 @@ pub mod assemblies;
 pub mod collections;
 pub mod data_products;
 pub mod datasets;
+pub mod depositions;
 pub mod extractions;
 pub mod libraries;
 pub mod names;

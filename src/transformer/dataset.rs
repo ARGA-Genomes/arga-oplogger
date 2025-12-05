@@ -205,6 +205,15 @@ impl Dataset {
     //     Ok(())
     // }
 
+    pub fn load<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<usize, Error> {
+        if source_model.ends_with(".jsonl") {
+            Ok(self.load_jsonl(reader, source_model)?)
+        }
+        else {
+            self.load_csv(reader, source_model)
+        }
+    }
+
     /// Loads a CSV dataset as a TriG model.
     ///
     /// This will iterate through all records in the stream and build header
@@ -221,7 +230,7 @@ impl Dataset {
     /// ```
     pub fn load_csv<R: std::io::Read>(&mut self, reader: R, source_model: &str) -> Result<usize, Error> {
         // get the source data namespace for all loaded data
-        let source = format!("http://arga.org.au/model/{source_model}/");
+        let source = format!("http://arga.org.au/source/{source_model}");
         let source = Iri::new(source).map_err(TransformError::from)?;
         let schema = Namespace::new(self.schema.as_str()).map_err(TransformError::from)?;
 
