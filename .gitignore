@@ -12,5 +12,6 @@ devenv.local.nix
 # Added by cargo
 
 /target
+/tmp
 
 .env

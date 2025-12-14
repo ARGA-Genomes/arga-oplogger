@@ -295,12 +295,18 @@ impl Dataset {
             let record = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&line?)?;
             total = total + 1;
 
-            for (key, value) in record {
+            for (key, value) in Self::build_json_path(record)? {
                 let header = schema.get(&key)?;
 
                 match value {
-                    serde_json::Value::Bool(value) => continue,
-                    serde_json::Value::Number(value) => continue,
+                    serde_json::Value::Bool(value) => {
+                        self.source.insert(record_index, header, value, Some(&source))?;
+                    }
+                    serde_json::Value::Number(value) => {
+                        if let Some(val) = value.as_u64() {
+                            self.source.insert(record_index, header, val as usize, Some(&source))?;
+                        }
+                    }
                     serde_json::Value::String(value) => {
                         if value.trim().is_empty() {
                             continue;
@@ -316,6 +322,35 @@ impl Dataset {
         }
 
         Ok(total)
+    }
+
+    fn build_json_path(
+        object: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<Vec<(String, serde_json::Value)>, TransformError> {
+        let mut paths = Vec::new();
+
+        for (key, value) in object {
+            match value.clone() {
+                serde_json::Value::Bool(val) => {
+                    paths.push((key, value));
+                }
+                serde_json::Value::Number(val) => {
+                    paths.push((key, value));
+                }
+                serde_json::Value::String(val) => {
+                    paths.push((key, value));
+                }
+                serde_json::Value::Object(map) => {
+                    for (k, v) in Self::build_json_path(map)? {
+                        paths.push((format!("{key}.{k}"), v));
+                    }
+                }
+                serde_json::Value::Array(values) => continue,
+                serde_json::Value::Null => continue,
+            };
+        }
+
+        Ok(paths)
     }
 
     fn get_source_models(&self, model: &str) -> Result<Vec<Iri<String>>, TransformError> {

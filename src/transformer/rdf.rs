@@ -29,6 +29,7 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     String(String),
+    UInt64(u64),
 }
 
 impl TryFrom<&SimpleTerm<'static>> for Literal {
@@ -198,6 +199,7 @@ impl From<(Name, Literal)> for NameField {
             (Name::CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (Name::ScientificName, Literal::String(value)) => Self::ScientificName(value),
             (Name::ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -260,6 +262,7 @@ impl From<(Publication, Literal)> for PublicationField {
             (Publication::PublicationType, Literal::String(value)) => Self::PublicationType(value),
             (Publication::Citation, Literal::String(value)) => Self::Citation(value),
             (Publication::SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -375,6 +378,7 @@ impl From<(Tissue, Literal)> for TissueField {
             (Tissue::Storage, Literal::String(value)) => Self::Storage(value),
             (Tissue::Citation, Literal::String(value)) => Self::Citation(value),
             (Tissue::SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -564,6 +568,7 @@ impl From<(Collecting, Literal)> for CollectingField {
 
             (Collecting::CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (Collecting::ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -735,6 +740,7 @@ impl From<(Organism, Literal)> for OrganismField {
             (Organism::PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
             (Organism::CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (Organism::ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -854,6 +860,7 @@ impl From<(Subsample, Literal)> for SubsampleField {
             (Subsample::LabHost, Literal::String(value)) => Self::LabHost(value),
             (Subsample::SampleProcessing, Literal::String(value)) => Self::SampleProcessing(value),
             (Subsample::SamplePooling, Literal::String(value)) => Self::SamplePooling(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -977,6 +984,7 @@ impl From<(Extraction, Literal)> for ExtractionField {
             (ExtractedByEntityId, Literal::String(value)) => Self::ExtractedByEntityId(value),
             (MaterialExtractedByEntityId, Literal::String(value)) => Self::MaterialExtractedByEntityId(value),
             (PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -1121,6 +1129,7 @@ impl From<(Library, Literal)> for LibraryField {
             (PreparedByEntityId, Literal::String(value)) => Self::PreparedByEntityId(value),
             (CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -1209,6 +1218,7 @@ impl From<(SequencingRun, Literal)> for SequencingRunField {
             (AnalysisSoftware, Literal::String(value)) => Self::AnalysisSoftware(value),
             (AnalysisSoftwareVersion, Literal::String(value)) => Self::AnalysisSoftwareVersion(value),
             (TargetGene, Literal::String(value)) => Self::TargetGene(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -1239,6 +1249,8 @@ pub enum Assembly {
     MethodLink,
     #[iri("fields:size")]
     Size,
+    #[iri("fields:size_ungapped")]
+    SizeUngapped,
     #[iri("fields:minimum_gap_length")]
     MinimumGapLength,
     #[iri("fields:completeness")]
@@ -1253,6 +1265,22 @@ pub enum Assembly {
     ReferenceGenomeLink,
     #[iri("fields:number_of_scaffolds")]
     NumberOfScaffolds,
+    #[iri("fields:number_of_contigs")]
+    NumberOfContigs,
+    #[iri("fields:number_of_chromosomes")]
+    NumberOfChromosomes,
+    #[iri("fields:number_of_component_sequences")]
+    NumberOfComponentSequences,
+    #[iri("fields:number_of_organelles")]
+    NumberOfOrganelles,
+    #[iri("fields:number_of_gaps_between_scaffolds")]
+    NumberOfGapsBetweenScaffolds,
+    #[iri("fields:number_of_atgc")]
+    NumberOfATGC,
+    #[iri("fields:number_of_guanine_cytosine")]
+    NumberOfGuanineCytosine,
+    #[iri("fields:guanine_cytosine_percent")]
+    GuanineCytosinePercent,
     #[iri("fields:genome_coverage")]
     GenomeCoverage,
     #[iri("fields:hybrid")]
@@ -1269,6 +1297,23 @@ pub enum Assembly {
     SystemUsed,
     #[iri("fields:assembly_n50")]
     AssemblyN50,
+    #[iri("fields:contig_n50")]
+    ContigN50,
+    #[iri("fields:contig_l50")]
+    ContigL50,
+    #[iri("fields:scaffold_n50")]
+    ScaffoldN50,
+    #[iri("fields:scaffold_l50")]
+    ScaffoldL50,
+
+    #[iri("fields:longest_contig")]
+    LongestContig,
+    #[iri("fields:longest_scaffold")]
+    LongestScaffold,
+    #[iri("fields:total_contig_size")]
+    TotalContigSize,
+    #[iri("fields:total_scaffold_size")]
+    TotalScaffoldSize,
 
     #[iri("fields:canonical_name")]
     CanonicalName,
@@ -1292,22 +1337,42 @@ pub enum AssemblyField {
     Method(String),
     MethodVersion(String),
     MethodLink(String),
-    Size(String),
+    Size(u64),
+    SizeUngapped(u64),
     MinimumGapLength(String),
     Completeness(String),
     CompletenessMethod(String),
     SourceMolecule(String),
     ReferenceGenomeUsed(String),
     ReferenceGenomeLink(String),
-    NumberOfScaffolds(String),
-    GenomeCoverage(String),
     Hybrid(String),
     HybridInformation(String),
     PolishingOrScaffoldingMethod(String),
     PolishingOrScaffoldingData(String),
     ComputationalInfrastructure(String),
     SystemUsed(String),
+
+    NumberOfScaffolds(u64),
+    NumberOfContigs(u64),
+    NumberOfChromosomes(u64),
+    NumberOfComponentSequences(u64),
+    NumberOfOrganelles(u64),
+    NumberOfGapsBetweenScaffolds(u64),
+    NumberOfATGC(u64),
+    NumberOfGuanineCytosine(u64),
+    GuanineCytosinePercent(u64),
+    GenomeCoverage(String),
     AssemblyN50(String),
+    ContigN50(u64),
+    ContigL50(u64),
+    ScaffoldN50(u64),
+    ScaffoldL50(u64),
+
+    LongestContig(u64),
+    LongestScaffold(u64),
+    TotalContigSize(u64),
+    TotalScaffoldSize(u64),
+
     CanonicalName(String),
     ScientificNameAuthorship(String),
     TaxonId(String),
@@ -1328,14 +1393,42 @@ impl From<(Assembly, Literal)> for AssemblyField {
             (Method, Literal::String(value)) => Self::Method(value),
             (MethodVersion, Literal::String(value)) => Self::MethodVersion(value),
             (MethodLink, Literal::String(value)) => Self::MethodLink(value),
-            (Size, Literal::String(value)) => Self::Size(value),
+            (Size, Literal::UInt64(value)) => Self::Size(value),
+            (Size, Literal::String(value)) => Self::Size(str_to_u64(&value).unwrap()),
+            (SizeUngapped, Literal::UInt64(value)) => Self::SizeUngapped(value),
+            (SizeUngapped, Literal::String(value)) => Self::SizeUngapped(str_to_u64(&value).unwrap()),
             (MinimumGapLength, Literal::String(value)) => Self::MinimumGapLength(value),
             (Completeness, Literal::String(value)) => Self::Completeness(value),
             (CompletenessMethod, Literal::String(value)) => Self::CompletenessMethod(value),
             (SourceMolecule, Literal::String(value)) => Self::SourceMolecule(value),
             (ReferenceGenomeUsed, Literal::String(value)) => Self::ReferenceGenomeUsed(value),
             (ReferenceGenomeLink, Literal::String(value)) => Self::ReferenceGenomeLink(value),
-            (NumberOfScaffolds, Literal::String(value)) => Self::NumberOfScaffolds(value),
+            (NumberOfScaffolds, Literal::UInt64(value)) => Self::NumberOfScaffolds(value),
+            (NumberOfScaffolds, Literal::String(value)) => Self::NumberOfScaffolds(str_to_u64(&value).unwrap()),
+            (NumberOfContigs, Literal::UInt64(value)) => Self::NumberOfContigs(value),
+            (NumberOfContigs, Literal::String(value)) => Self::NumberOfContigs(str_to_u64(&value).unwrap()),
+            (NumberOfChromosomes, Literal::UInt64(value)) => Self::NumberOfChromosomes(value),
+            (NumberOfChromosomes, Literal::String(value)) => Self::NumberOfChromosomes(str_to_u64(&value).unwrap()),
+            (NumberOfComponentSequences, Literal::UInt64(value)) => Self::NumberOfComponentSequences(value),
+            (NumberOfComponentSequences, Literal::String(value)) => {
+                Self::NumberOfComponentSequences(str_to_u64(&value).unwrap())
+            }
+            (NumberOfOrganelles, Literal::UInt64(value)) => Self::NumberOfOrganelles(value),
+            (NumberOfOrganelles, Literal::String(value)) => Self::NumberOfOrganelles(str_to_u64(&value).unwrap()),
+            (NumberOfGapsBetweenScaffolds, Literal::UInt64(value)) => Self::NumberOfGapsBetweenScaffolds(value),
+            (NumberOfGapsBetweenScaffolds, Literal::String(value)) => {
+                Self::NumberOfGapsBetweenScaffolds(str_to_u64(&value).unwrap())
+            }
+            (NumberOfATGC, Literal::UInt64(value)) => Self::NumberOfATGC(value),
+            (NumberOfATGC, Literal::String(value)) => Self::NumberOfATGC(str_to_u64(&value).unwrap()),
+            (NumberOfGuanineCytosine, Literal::UInt64(value)) => Self::NumberOfGuanineCytosine(value),
+            (NumberOfGuanineCytosine, Literal::String(value)) => {
+                Self::NumberOfGuanineCytosine(str_to_u64(&value).unwrap())
+            }
+            (GuanineCytosinePercent, Literal::UInt64(value)) => Self::GuanineCytosinePercent(value),
+            (GuanineCytosinePercent, Literal::String(value)) => {
+                Self::GuanineCytosinePercent(str_to_u64(&value).unwrap())
+            }
             (GenomeCoverage, Literal::String(value)) => Self::GenomeCoverage(value),
             (Hybrid, Literal::String(value)) => Self::Hybrid(value),
             (HybridInformation, Literal::String(value)) => Self::HybridInformation(value),
@@ -1344,9 +1437,31 @@ impl From<(Assembly, Literal)> for AssemblyField {
             (ComputationalInfrastructure, Literal::String(value)) => Self::ComputationalInfrastructure(value),
             (SystemUsed, Literal::String(value)) => Self::SystemUsed(value),
             (AssemblyN50, Literal::String(value)) => Self::AssemblyN50(value),
+            (ContigN50, Literal::UInt64(value)) => Self::ContigN50(value),
+            (ContigN50, Literal::String(value)) => Self::ContigN50(str_to_u64(&value).unwrap()),
+            (ContigL50, Literal::UInt64(value)) => Self::ContigL50(value),
+            (ContigL50, Literal::String(value)) => Self::ContigL50(str_to_u64(&value).unwrap()),
+            (ScaffoldN50, Literal::UInt64(value)) => Self::ScaffoldN50(value),
+            (ScaffoldN50, Literal::String(value)) => Self::ScaffoldN50(str_to_u64(&value).unwrap()),
+            (ScaffoldL50, Literal::UInt64(value)) => Self::ScaffoldL50(value),
+            (ScaffoldL50, Literal::String(value)) => Self::ScaffoldL50(str_to_u64(&value).unwrap()),
+
+            (LongestContig, Literal::UInt64(value)) => Self::LongestContig(value),
+            (LongestContig, Literal::String(value)) => Self::LongestContig(str_to_u64(&value).unwrap()),
+            (LongestScaffold, Literal::UInt64(value)) => Self::LongestScaffold(value),
+            (LongestScaffold, Literal::String(value)) => Self::LongestScaffold(str_to_u64(&value).unwrap()),
+            (TotalContigSize, Literal::UInt64(value)) => Self::TotalContigSize(value),
+            (TotalContigSize, Literal::String(value)) => Self::TotalContigSize(str_to_u64(&value).unwrap()),
+            (TotalScaffoldSize, Literal::UInt64(value)) => Self::TotalScaffoldSize(value),
+            (TotalScaffoldSize, Literal::String(value)) => Self::TotalScaffoldSize(str_to_u64(&value).unwrap()),
+
             (CanonicalName, Literal::String(value)) => Self::CanonicalName(value),
             (ScientificNameAuthorship, Literal::String(value)) => Self::ScientificNameAuthorship(value),
             (TaxonId, Literal::String(value)) => Self::TaxonId(value),
+            (field, val) => {
+                tracing::error!(?field, ?val, "unsupported field format");
+                unimplemented!()
+            }
         }
     }
 }
@@ -1447,6 +1562,7 @@ impl From<(DataProduct, Literal)> for DataProductField {
             (SourceUrl, Literal::String(value)) => Self::SourceUrl(value),
             (CustodianEntityId, Literal::String(value)) => Self::CustodianEntityId(value),
             (PublicationEntityId, Literal::String(value)) => Self::PublicationEntityId(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -1497,6 +1613,7 @@ impl From<(Annotation, Literal)> for AnnotationField {
             (EventDate, Literal::String(value)) => Self::EventDate(value),
             (NumberOfGenes, Literal::String(value)) => Self::NumberOfGenes(value),
             (NumberOfProteins, Literal::String(value)) => Self::NumberOfProteins(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -1539,6 +1656,7 @@ impl From<(Deposition, Literal)> for DepositionField {
             (EventDate, Literal::String(value)) => Self::EventDate(value),
             (Url, Literal::String(value)) => Self::Url(value),
             (Institution, Literal::String(value)) => Self::Institution(value),
+            _ => unimplemented!(),
         }
     }
 }
@@ -1610,4 +1728,10 @@ where
         let iri = iref::IriBuf::new(self.to_string())?;
         Ok(iri)
     }
+}
+
+
+fn str_to_u64(value: &str) -> Result<u64, TransformError> {
+    let scrubbed = value.replace(",", "");
+    Ok(scrubbed.parse::<u64>()?)
 }

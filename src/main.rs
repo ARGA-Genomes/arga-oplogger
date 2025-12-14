@@ -169,6 +169,8 @@ pub enum ExtractCommand {
     Bioplatforms,
     Genbank,
     NcbiTaxonomy,
+    NcbiDatasets,
+    Dnazoo,
 }
 
 
@@ -302,6 +304,8 @@ fn main() -> Result<(), Error> {
                 ExtractCommand::Bioplatforms => crate::extractor::bpa::extract()?,
                 ExtractCommand::Genbank => crate::extractor::genbank::extract()?,
                 ExtractCommand::NcbiTaxonomy => crate::extractor::ncbi_taxonomy::extract()?,
+                ExtractCommand::NcbiDatasets => crate::extractor::ncbi_datasets::extract()?,
+                ExtractCommand::Dnazoo => crate::extractor::dnazoo::extract()?,
             };
 
             if let Some(filename) = outfile {

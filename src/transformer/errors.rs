@@ -38,6 +38,9 @@ pub enum TransformError {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    ParseIntError(#[from] std::num::ParseIntError),
 }
 
 

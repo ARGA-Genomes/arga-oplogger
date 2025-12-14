@@ -19,15 +19,13 @@ use crate::readers::meta::Meta;
 
 
 mod ttl {
-    pub const NAMES: &[u8] = include_bytes!("../../rdf/names.ttl");
-    pub const SPECIMENS: &[u8] = include_bytes!("../../rdf/specimens.ttl");
-    pub const SUBSAMPLES: &[u8] = include_bytes!("../../rdf/subsamples.ttl");
-    pub const EXTRACTIONS: &[u8] = include_bytes!("../../rdf/extractions.ttl");
-    pub const SEQUENCES: &[u8] = include_bytes!("../../rdf/sequences.ttl");
-    pub const DATA_PRODUCTS: &[u8] = include_bytes!("../../rdf/data_products.ttl");
-    pub const ANNOTATIONS: &[u8] = include_bytes!("../../rdf/annotations.ttl");
-    pub const DEPOSITIONS: &[u8] = include_bytes!("../../rdf/depositions.ttl");
-    pub const ARGA: &[u8] = include_bytes!("../../rdf/arga.ttl");
+    pub const ARGA_TSI: &[u8] = include_bytes!("../../schemas/arga_tsi.ttl");
+    pub const BIOPLATFORMS: &[u8] = include_bytes!("../../schemas/bioplatforms.ttl");
+    pub const DNAZOO: &[u8] = include_bytes!("../../schemas/dnazoo.ttl");
+    pub const NCBI_TAXONOMY: &[u8] = include_bytes!("../../schemas/ncbi_taxonomy.ttl");
+    pub const NCBI_BIOSAMPLES: &[u8] = include_bytes!("../../schemas/ncbi_biosamples.ttl");
+    pub const NCBI_GENBANK: &[u8] = include_bytes!("../../schemas/ncbi_genbank.ttl");
+    pub const NCBI_REPORTS: &[u8] = include_bytes!("../../schemas/ncbi_reports.ttl");
 }
 
 
@@ -44,23 +42,14 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
     )?;
 
     // load the mapping definitions
-    dataset.load_trig(BufReader::new(ttl::NAMES))?;
-    dataset.load_trig(BufReader::new(ttl::SPECIMENS))?;
-    dataset.load_trig(BufReader::new(ttl::SUBSAMPLES))?;
-    dataset.load_trig(BufReader::new(ttl::EXTRACTIONS))?;
-    dataset.load_trig(BufReader::new(ttl::SEQUENCES))?;
-    dataset.load_trig(BufReader::new(ttl::DATA_PRODUCTS))?;
-    dataset.load_trig(BufReader::new(ttl::ANNOTATIONS))?;
-    dataset.load_trig(BufReader::new(ttl::DEPOSITIONS))?;
-    dataset.load_trig(BufReader::new(ttl::ARGA))?;
+    // dataset.load_trig(BufReader::new(ttl::ARGA_TSI))?;
+    // dataset.load_trig(BufReader::new(ttl::BIOPLATFORMS))?;
+    dataset.load_trig(BufReader::new(ttl::DNAZOO))?;
+    // dataset.load_trig(BufReader::new(ttl::NCBI_TAXONOMY))?;
+    // dataset.load_trig(BufReader::new(ttl::NCBI_BIOSAMPLES))?;
+    // dataset.load_trig(BufReader::new(ttl::NCBI_GENBANK))?;
+    dataset.load_trig(BufReader::new(ttl::NCBI_REPORTS))?;
 
-    // dataset.load_trig_path("rdf/names.ttl")?;
-    // dataset.load_trig_path("rdf/specimens.ttl")?;
-    // dataset.load_trig_path("rdf/subsamples.ttl")?;
-    // dataset.load_trig_path("rdf/extractions.ttl")?;
-    // dataset.load_trig_path("rdf/sequences.ttl")?;
-    // dataset.load_trig_path("rdf/data_products.ttl")?;
-    // dataset.load_trig_path("rdf/arga.ttl")?;
 
     let file = File::open(path)?;
     let mut archive = tar::Archive::new(file);
@@ -90,7 +79,6 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
 
         // dataset.load_csv_oxi(stream, &name)?;
         let rows = dataset.load(stream, &name)?;
-        // let rows = dataset.load_jsonl(stream, &name)?;
         info!(path, name, rows, "CSV loaded");
     }
 

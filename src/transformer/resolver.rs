@@ -82,25 +82,26 @@ impl Resolver<'_> {
                             value
                         }
                         Map::Combines(iris) => {
-                            let mut to_combine: Vec<&str> = Vec::new();
+                            let mut to_combine: Vec<String> = Vec::new();
                             for iri in iris {
                                 // a field can be mapped to multiple source fields so we
                                 // need to handle that scenario here. this can lead to pretty
                                 // strange bugs due to the order being random so if there is
-                                // a more than one value we fail with an ambiguity error.
+                                // more than one value we fail with an ambiguity error.
                                 //
                                 // the reason why this matter for Combines is because we can't
                                 // tell which value is from which graph leaving us no possible way
                                 // to combine values isolated within their graphs
                                 if let Some(values) = fields.get(iri) {
-                                    let present: Vec<&String> = values
+                                    let present: Vec<String> = values
                                         .iter()
                                         .filter_map(|v| match v {
                                             // only return strings with actual data
                                             Literal::String(val) => match val.is_empty() {
                                                 true => None,
-                                                false => Some(val),
+                                                false => Some(val.clone()),
                                             },
+                                            Literal::UInt64(val) => Some(val.to_string()),
                                         })
                                         .collect();
 
@@ -426,7 +427,8 @@ impl Resolver<'_> {
             match pred {
                 Rdfs::First => match o {
                     SimpleTerm::Iri(iri_ref) => iris.push(iri_ref.to_iri_owned()?),
-                    _ => unimplemented!(),
+                    _ => continue,
+                    // _ => unimplemented!(),
                 },
 
                 Rdfs::Rest => match o {

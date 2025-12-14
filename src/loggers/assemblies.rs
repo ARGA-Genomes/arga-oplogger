@@ -118,10 +118,25 @@ struct Record {
     polishing_or_scaffolding_data: Option<String>,
     computational_infrastructure: Option<String>,
     system_used: Option<String>,
-    assembly_n50: Option<String>,
+
     number_of_scaffolds: Option<i32>,
     number_of_contigs: Option<i32>,
     number_of_replicons: Option<i32>,
+    number_of_chromosomes: Option<i32>,
+    number_of_component_sequences: Option<i32>,
+    number_of_organelles: Option<i32>,
+    number_of_gaps_between_scaffolds: Option<i32>,
+    number_of_guanine_cytosine: Option<i64>,
+    number_of_atgc: Option<i64>,
+    assembly_n50: Option<String>,
+    contig_n50: Option<i32>,
+    contig_l50: Option<i32>,
+    scaffold_n50: Option<i32>,
+    scaffold_l50: Option<i32>,
+    longest_contig: Option<i32>,
+    longest_scaffold: Option<i32>,
+    total_contig_size: Option<i64>,
+    total_scaffold_size: Option<i64>,
 }
 
 impl IntoFrame for Record {
@@ -164,10 +179,24 @@ impl IntoFrame for Record {
         frame_push_opt!(frame, PolishingOrScaffoldingData, self.polishing_or_scaffolding_data);
         frame_push_opt!(frame, ComputationalInfrastructure, self.computational_infrastructure);
         frame_push_opt!(frame, SystemUsed, self.system_used);
-        frame_push_opt!(frame, AssemblyN50, self.assembly_n50);
         frame_push_opt!(frame, NumberOfScaffolds, self.number_of_scaffolds);
         frame_push_opt!(frame, NumberOfContigs, self.number_of_contigs);
         frame_push_opt!(frame, NumberOfReplicons, self.number_of_replicons);
+        frame_push_opt!(frame, NumberOfChromosomes, self.number_of_chromosomes);
+        frame_push_opt!(frame, NumberOfComponentSequences, self.number_of_component_sequences);
+        frame_push_opt!(frame, NumberOfOrganelles, self.number_of_organelles);
+        frame_push_opt!(frame, NumberOfGapsBetweenScaffolds, self.number_of_gaps_between_scaffolds);
+        frame_push_opt!(frame, NumberOfGuanineCytosine, self.number_of_guanine_cytosine);
+        frame_push_opt!(frame, NumberOfATGC, self.number_of_atgc);
+        frame_push_opt!(frame, AssemblyN50, self.assembly_n50);
+        frame_push_opt!(frame, ContigN50, self.contig_n50);
+        frame_push_opt!(frame, ContigL50, self.contig_l50);
+        frame_push_opt!(frame, ScaffoldN50, self.scaffold_n50);
+        frame_push_opt!(frame, ScaffoldL50, self.scaffold_l50);
+        frame_push_opt!(frame, LongestContig, self.longest_contig);
+        frame_push_opt!(frame, LongestScaffold, self.longest_scaffold);
+        frame_push_opt!(frame, TotalContigSize, self.total_contig_size);
+        frame_push_opt!(frame, TotalScaffoldSize, self.total_scaffold_size);
         frame
     }
 }
@@ -255,9 +284,23 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
         let mut computational_infrastructure = None;
         let mut system_used = None;
         let mut assembly_n50 = None;
+        let mut contig_n50 = None;
+        let mut contig_l50 = None;
+        let mut scaffold_n50 = None;
+        let mut scaffold_l50 = None;
+        let mut longest_contig = None;
+        let mut longest_scaffold = None;
+        let mut total_contig_size = None;
+        let mut total_scaffold_size = None;
         let mut number_of_scaffolds = None;
         let mut number_of_contigs = None;
         let mut number_of_replicons = None;
+        let mut number_of_chromosomes = None;
+        let mut number_of_component_sequences = None;
+        let mut number_of_organelles = None;
+        let mut number_of_gaps_between_scaffolds = None;
+        let mut number_of_guanine_cytosine = None;
+        let mut number_of_atgc = None;
         let mut facility = None;
         let mut level = None;
         let mut size_ungapped = None;
@@ -294,9 +337,23 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
                 ComputationalInfrastructure(value) => computational_infrastructure = Some(value),
                 SystemUsed(value) => system_used = Some(value),
                 AssemblyN50(value) => assembly_n50 = Some(value),
+                ContigN50(value) => contig_n50 = Some(value),
+                ContigL50(value) => contig_l50 = Some(value),
+                ScaffoldN50(value) => scaffold_n50 = Some(value),
+                ScaffoldL50(value) => scaffold_l50 = Some(value),
+                LongestContig(value) => longest_contig = Some(value),
+                LongestScaffold(value) => longest_scaffold = Some(value),
+                TotalContigSize(value) => total_contig_size = Some(value),
+                TotalScaffoldSize(value) => total_scaffold_size = Some(value),
                 NumberOfScaffolds(value) => number_of_scaffolds = Some(value),
                 NumberOfContigs(value) => number_of_contigs = Some(value),
                 NumberOfReplicons(value) => number_of_replicons = Some(value),
+                NumberOfChromosomes(value) => number_of_chromosomes = Some(value),
+                NumberOfComponentSequences(value) => number_of_component_sequences = Some(value),
+                NumberOfOrganelles(value) => number_of_organelles = Some(value),
+                NumberOfGapsBetweenScaffolds(value) => number_of_gaps_between_scaffolds = Some(value),
+                NumberOfGuanineCytosine(value) => number_of_guanine_cytosine = Some(value),
+                NumberOfATGC(value) => number_of_atgc = Some(value),
                 Facility(value) => facility = Some(value),
                 Level(value) => level = Some(value),
                 SizeUngapped(value) => size_ungapped = Some(value),
@@ -345,6 +402,12 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
             number_of_scaffolds,
             number_of_contigs,
             number_of_replicons,
+            number_of_chromosomes,
+            number_of_component_sequences,
+            number_of_organelles,
+            number_of_gaps_between_scaffolds,
+            number_of_guanine_cytosine,
+            number_of_atgc,
             hybrid,
             hybrid_information,
             polishing_or_scaffolding_method,
@@ -352,6 +415,14 @@ impl Reducer<Lookups> for AssemblyWithLibrary {
             computational_infrastructure,
             system_used,
             assembly_n50,
+            contig_n50,
+            contig_l50,
+            scaffold_n50,
+            scaffold_l50,
+            longest_contig,
+            longest_scaffold,
+            total_contig_size,
+            total_scaffold_size,
         };
 
         Ok(AssemblyWithLibrary {
@@ -427,6 +498,12 @@ pub fn update() -> Result<(), Error> {
                     number_of_scaffolds.eq(excluded(number_of_scaffolds)),
                     number_of_contigs.eq(excluded(number_of_contigs)),
                     number_of_replicons.eq(excluded(number_of_replicons)),
+                    number_of_chromosomes.eq(excluded(number_of_chromosomes)),
+                    number_of_component_sequences.eq(excluded(number_of_component_sequences)),
+                    number_of_organelles.eq(excluded(number_of_organelles)),
+                    number_of_gaps_between_scaffolds.eq(excluded(number_of_gaps_between_scaffolds)),
+                    number_of_guanine_cytosine.eq(excluded(number_of_guanine_cytosine)),
+                    number_of_atgc.eq(excluded(number_of_atgc)),
                     hybrid.eq(excluded(hybrid)),
                     hybrid_information.eq(excluded(hybrid_information)),
                     polishing_or_scaffolding_method.eq(excluded(polishing_or_scaffolding_method)),
@@ -434,6 +511,14 @@ pub fn update() -> Result<(), Error> {
                     computational_infrastructure.eq(excluded(computational_infrastructure)),
                     system_used.eq(excluded(system_used)),
                     assembly_n50.eq(excluded(assembly_n50)),
+                    contig_n50.eq(excluded(contig_n50)),
+                    contig_l50.eq(excluded(contig_l50)),
+                    scaffold_n50.eq(excluded(scaffold_n50)),
+                    scaffold_l50.eq(excluded(scaffold_l50)),
+                    longest_contig.eq(excluded(longest_contig)),
+                    longest_scaffold.eq(excluded(longest_scaffold)),
+                    total_contig_size.eq(excluded(total_contig_size)),
+                    total_scaffold_size.eq(excluded(total_scaffold_size)),
                 ))
                 .execute(&mut conn)?;
 
