@@ -1580,12 +1580,29 @@ pub enum Annotation {
     Name,
     #[iri("fields:provider")]
     Provider,
+    #[iri("fields:method")]
+    Method,
+    #[iri("fields:type")]
+    Type,
+    #[iri("fields:version")]
+    Version,
+    #[iri("fields:software")]
+    Software,
+    #[iri("fields:software_version")]
+    SoftwareVersion,
     #[iri("fields:event_date")]
     EventDate,
+
     #[iri("fields:number_of_genes")]
     NumberOfGenes,
-    #[iri("fields:number_of_proteins")]
-    NumberOfProteins,
+    #[iri("fields:number_of_coding_proteins")]
+    NumberOfCodingProteins,
+    #[iri("fields:number_of_non_coding_proteins")]
+    NumberOfNonCodingProteins,
+    #[iri("fields:number_of_pseudogenes")]
+    NumberOfPseudogenes,
+    #[iri("fields:number_of_other_genes")]
+    NumberOfOtherGenes,
 }
 
 
@@ -1596,9 +1613,18 @@ pub enum AnnotationField {
 
     Name(String),
     Provider(String),
+    Method(String),
+    Type(String),
+    Version(String),
+    Software(String),
+    SoftwareVersion(String),
     EventDate(String),
-    NumberOfGenes(String),
-    NumberOfProteins(String),
+
+    NumberOfGenes(u64),
+    NumberOfCodingProteins(u64),
+    NumberOfNonCodingProteins(u64),
+    NumberOfPseudogenes(u64),
+    NumberOfOtherGenes(u64),
 }
 
 
@@ -1610,9 +1636,26 @@ impl From<(Annotation, Literal)> for AnnotationField {
             (AssemblyId, Literal::String(value)) => Self::AssemblyId(value),
             (Name, Literal::String(value)) => Self::Name(value),
             (Provider, Literal::String(value)) => Self::Provider(value),
+            (Method, Literal::String(value)) => Self::Method(value),
+            (Type, Literal::String(value)) => Self::Type(value),
+            (Version, Literal::String(value)) => Self::Version(value),
+            (Software, Literal::String(value)) => Self::Software(value),
+            (SoftwareVersion, Literal::String(value)) => Self::SoftwareVersion(value),
             (EventDate, Literal::String(value)) => Self::EventDate(value),
-            (NumberOfGenes, Literal::String(value)) => Self::NumberOfGenes(value),
-            (NumberOfProteins, Literal::String(value)) => Self::NumberOfProteins(value),
+            (NumberOfGenes, Literal::UInt64(value)) => Self::NumberOfGenes(value),
+            (NumberOfGenes, Literal::String(value)) => Self::NumberOfGenes(str_to_u64(&value).unwrap()),
+            (NumberOfCodingProteins, Literal::UInt64(value)) => Self::NumberOfCodingProteins(value),
+            (NumberOfCodingProteins, Literal::String(value)) => {
+                Self::NumberOfCodingProteins(str_to_u64(&value).unwrap())
+            }
+            (NumberOfNonCodingProteins, Literal::UInt64(value)) => Self::NumberOfNonCodingProteins(value),
+            (NumberOfNonCodingProteins, Literal::String(value)) => {
+                Self::NumberOfNonCodingProteins(str_to_u64(&value).unwrap())
+            }
+            (NumberOfPseudogenes, Literal::UInt64(value)) => Self::NumberOfPseudogenes(value),
+            (NumberOfPseudogenes, Literal::String(value)) => Self::NumberOfPseudogenes(str_to_u64(&value).unwrap()),
+            (NumberOfOtherGenes, Literal::UInt64(value)) => Self::NumberOfOtherGenes(value),
+            (NumberOfOtherGenes, Literal::String(value)) => Self::NumberOfOtherGenes(str_to_u64(&value).unwrap()),
             _ => unimplemented!(),
         }
     }
@@ -1660,6 +1703,125 @@ impl From<(Deposition, Literal)> for DepositionField {
         }
     }
 }
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum Project {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:project_id")]
+    ProjectId,
+
+    #[iri("fields:scientific_name")]
+    ScientificName,
+    #[iri("fields:initiative")]
+    Initiative,
+    #[iri("fields:initiative_theme")]
+    InitiativeTheme,
+    #[iri("fields:title")]
+    Title,
+    #[iri("fields:description")]
+    Description,
+    #[iri("fields:data_context")]
+    DataContext,
+    #[iri("fields:data_types")]
+    DataTypes,
+    #[iri("fields:data_assay_types")]
+    DataAssayTypes,
+    #[iri("fields:partners")]
+    Partners,
+
+    #[iri("fields:curator")]
+    Curator,
+    #[iri("fields:curator_orcid")]
+    CuratorOrcid,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum ProjectField {
+    EntityId(String),
+    ProjectId(String),
+
+    ScientificName(String),
+    Initiative(String),
+    InitiativeTheme(String),
+    Title(String),
+    Description(String),
+    DataContext(String),
+    DataTypes(String),
+    DataAssayTypes(String),
+    Partners(String),
+
+    Curator(String),
+    CuratorOrcid(String),
+}
+
+
+impl From<(Project, Literal)> for ProjectField {
+    fn from(source: (Project, Literal)) -> Self {
+        use Project::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (ProjectId, Literal::String(value)) => Self::ProjectId(value),
+            (ScientificName, Literal::String(value)) => Self::ScientificName(value),
+            (Initiative, Literal::String(value)) => Self::Initiative(value),
+            (InitiativeTheme, Literal::String(value)) => Self::InitiativeTheme(value),
+            (Title, Literal::String(value)) => Self::Title(value),
+            (Description, Literal::String(value)) => Self::Description(value),
+            (DataContext, Literal::String(value)) => Self::DataContext(value),
+            (DataTypes, Literal::String(value)) => Self::DataTypes(value),
+            (DataAssayTypes, Literal::String(value)) => Self::DataAssayTypes(value),
+            (Partners, Literal::String(value)) => Self::Partners(value),
+            (Curator, Literal::String(value)) => Self::Curator(value),
+            (CuratorOrcid, Literal::String(value)) => Self::CuratorOrcid(value),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+
+#[derive(Debug, IriEnum)]
+#[iri_prefix("fields" = "http://arga.org.au/schemas/fields/")]
+pub enum ProjectMember {
+    #[iri("fields:entity_id")]
+    EntityId,
+    #[iri("fields:project_id")]
+    ProjectId,
+    #[iri("fields:name")]
+    Name,
+    #[iri("fields:orcid")]
+    Orcid,
+    #[iri("fields:organisation")]
+    Organisation,
+}
+
+
+#[derive(Debug, Clone)]
+pub enum ProjectMemberField {
+    EntityId(String),
+    ProjectId(String),
+    Name(String),
+    Orcid(String),
+    Organisation(String),
+}
+
+
+impl From<(ProjectMember, Literal)> for ProjectMemberField {
+    fn from(source: (ProjectMember, Literal)) -> Self {
+        use ProjectMember::*;
+        match source {
+            (EntityId, Literal::String(value)) => Self::EntityId(value),
+            (ProjectId, Literal::String(value)) => Self::ProjectId(value),
+            (Name, Literal::String(value)) => Self::Name(value),
+            (Orcid, Literal::String(value)) => Self::Orcid(value),
+            (Organisation, Literal::String(value)) => Self::Organisation(value),
+            _ => unimplemented!(),
+        }
+    }
+}
+
 
 pub fn try_from_term<'a, T>(value: &'a SimpleTerm<'static>) -> Result<T, TransformError>
 where

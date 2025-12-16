@@ -19,6 +19,7 @@ use crate::readers::meta::Meta;
 
 
 mod ttl {
+    pub const ARGA_PROJECTS: &[u8] = include_bytes!("../../schemas/arga_projects.ttl");
     pub const ARGA_TSI: &[u8] = include_bytes!("../../schemas/arga_tsi.ttl");
     pub const BIOPLATFORMS: &[u8] = include_bytes!("../../schemas/bioplatforms.ttl");
     pub const DNAZOO: &[u8] = include_bytes!("../../schemas/dnazoo.ttl");
@@ -42,6 +43,7 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
     )?;
 
     // load the mapping definitions
+    dataset.load_trig(BufReader::new(ttl::ARGA_PROJECTS))?;
     // dataset.load_trig(BufReader::new(ttl::ARGA_TSI))?;
     // dataset.load_trig(BufReader::new(ttl::BIOPLATFORMS))?;
     dataset.load_trig(BufReader::new(ttl::DNAZOO))?;
@@ -126,6 +128,8 @@ fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
     export_compressed(models::data_products::get_all(&dataset)?, "data_products.csv.br")?;
     export_compressed(models::annotation::get_all(&dataset)?, "annotations.csv.br")?;
     export_compressed(models::deposition::get_all(&dataset)?, "depositions.csv.br")?;
+    export_compressed(models::projects::get_all(&dataset)?, "projects.csv.br")?;
+    export_compressed(models::project_members::get_all(&dataset)?, "project_members.csv.br")?;
 
     package(meta)
 }
@@ -174,6 +178,8 @@ pub fn package(meta: Meta) -> Result<String, Error> {
     append_if_exists(&mut archive, "data_products.csv.br")?;
     append_if_exists(&mut archive, "annotations.csv.br")?;
     append_if_exists(&mut archive, "depositions.csv.br")?;
+    append_if_exists(&mut archive, "projects.csv.br")?;
+    append_if_exists(&mut archive, "project_members.csv.br")?;
 
     archive.finish()?;
     Ok(filename)

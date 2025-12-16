@@ -531,3 +531,25 @@ where
     let s: String = Deserialize::deserialize(deserializer)?;
     Ok(s.parse::<T>().ok())
 }
+
+pub fn parse_string_array_opt<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    let items = str_to_string_array(&s);
+
+    match s.is_empty() || items.is_empty() {
+        true => Ok(None),
+        false => Ok(Some(items)),
+    }
+}
+
+pub fn str_to_string_array(value: &str) -> Vec<String> {
+    value.split(",").map(|s| s.trim().to_string()).collect()
+}
+
+
+pub fn to_pg_array<T>(values: Vec<T>) -> Vec<Option<T>> {
+    values.into_iter().map(|i| Some(i)).collect()
+}

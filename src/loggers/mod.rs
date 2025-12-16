@@ -12,6 +12,7 @@ pub mod libraries;
 pub mod names;
 pub mod nomenclatural_acts;
 pub mod organisms;
+pub mod projects;
 pub mod publications;
 pub mod sequence_runs;
 pub mod sequences;

@@ -91,12 +91,23 @@ struct Record {
 
     name: Option<String>,
     provider: Option<String>,
+    method: Option<String>,
+    r#type: Option<String>,
+    version: Option<String>,
+    software: Option<String>,
+    software_version: Option<String>,
     event_date: Option<chrono::NaiveDate>,
 
     #[serde(deserialize_with = "parse_string_opt")]
     number_of_genes: Option<i32>,
     #[serde(deserialize_with = "parse_string_opt")]
-    number_of_proteins: Option<i32>,
+    number_of_coding_proteins: Option<i32>,
+    #[serde(deserialize_with = "parse_string_opt")]
+    number_of_non_coding_proteins: Option<i32>,
+    #[serde(deserialize_with = "parse_string_opt")]
+    number_of_pseudogenes: Option<i32>,
+    #[serde(deserialize_with = "parse_string_opt")]
+    number_of_other_genes: Option<i32>,
 }
 
 impl IntoFrame for Record {
@@ -112,9 +123,17 @@ impl IntoFrame for Record {
         frame.push(AssemblyId(self.assembly_id));
         frame_push_opt!(frame, Name, self.name);
         frame_push_opt!(frame, Provider, self.provider);
+        frame_push_opt!(frame, Method, self.method);
+        frame_push_opt!(frame, Type, self.r#type);
+        frame_push_opt!(frame, Version, self.version);
+        frame_push_opt!(frame, Software, self.software);
+        frame_push_opt!(frame, SoftwareVersion, self.software_version);
         frame_push_opt!(frame, EventDate, self.event_date);
         frame_push_opt!(frame, NumberOfGenes, self.number_of_genes);
-        frame_push_opt!(frame, NumberOfProteins, self.number_of_proteins);
+        frame_push_opt!(frame, NumberOfCodingProteins, self.number_of_coding_proteins);
+        frame_push_opt!(frame, NumberOfNonCodingProteins, self.number_of_non_coding_proteins);
+        frame_push_opt!(frame, NumberOfPseudogenes, self.number_of_pseudogenes);
+        frame_push_opt!(frame, NumberOfOtherGenes, self.number_of_other_genes);
         frame
     }
 }
@@ -174,9 +193,17 @@ impl Reducer<Lookups> for models::Annotation {
         let mut assembly_id = None;
         let mut name = None;
         let mut provider = None;
+        let mut method = None;
+        let mut type_ = None;
+        let mut version = None;
+        let mut software = None;
+        let mut software_version = None;
         let mut event_date = None;
         let mut number_of_genes = None;
-        let mut number_of_proteins = None;
+        let mut number_of_coding_proteins = None;
+        let mut number_of_non_coding_proteins = None;
+        let mut number_of_pseudogenes = None;
+        let mut number_of_other_genes = None;
 
 
         for atom in atoms {
@@ -185,9 +212,17 @@ impl Reducer<Lookups> for models::Annotation {
                 AssemblyId(value) => assembly_id = Some(value),
                 Name(value) => name = Some(value),
                 Provider(value) => provider = Some(value),
+                Method(value) => method = Some(value),
+                Type(value) => type_ = Some(value),
+                Version(value) => version = Some(value),
+                Software(value) => software = Some(value),
+                SoftwareVersion(value) => software_version = Some(value),
                 EventDate(value) => event_date = Some(value),
                 NumberOfGenes(value) => number_of_genes = Some(value),
-                NumberOfProteins(value) => number_of_proteins = Some(value),
+                NumberOfCodingProteins(value) => number_of_coding_proteins = Some(value),
+                NumberOfNonCodingProteins(value) => number_of_non_coding_proteins = Some(value),
+                NumberOfPseudogenes(value) => number_of_pseudogenes = Some(value),
+                NumberOfOtherGenes(value) => number_of_other_genes = Some(value),
             }
         }
 
@@ -199,9 +234,17 @@ impl Reducer<Lookups> for models::Annotation {
             assembly_id: assembly_entity_id.to_string(),
             name,
             provider,
+            method,
+            type_,
+            version,
+            software,
+            software_version,
             event_date,
             number_of_genes,
-            number_of_proteins,
+            number_of_coding_proteins,
+            number_of_non_coding_proteins,
+            number_of_pseudogenes,
+            number_of_other_genes,
         };
 
         Ok(record)
@@ -242,9 +285,17 @@ pub fn update() -> Result<(), Error> {
                     assembly_id.eq(excluded(assembly_id)),
                     name.eq(excluded(name)),
                     provider.eq(excluded(provider)),
+                    method.eq(excluded(method)),
+                    type_.eq(excluded(type_)),
+                    version.eq(excluded(version)),
+                    software.eq(excluded(software)),
+                    software_version.eq(excluded(software_version)),
                     event_date.eq(excluded(event_date)),
                     number_of_genes.eq(excluded(number_of_genes)),
-                    number_of_proteins.eq(excluded(number_of_proteins)),
+                    number_of_coding_proteins.eq(excluded(number_of_coding_proteins)),
+                    number_of_non_coding_proteins.eq(excluded(number_of_non_coding_proteins)),
+                    number_of_pseudogenes.eq(excluded(number_of_pseudogenes)),
+                    number_of_other_genes.eq(excluded(number_of_other_genes)),
                 ))
                 .execute(&mut conn)?;
 

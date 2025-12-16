@@ -31,6 +31,7 @@ pub enum ImportType {
     DataProducts,
     Annotations,
     Depositions,
+    Projects,
 
     AdminMedia,
 }
@@ -59,6 +60,7 @@ impl From<String> for ImportType {
             "data_products.csv.br" => DataProducts,
             "annotations.csv.br" => Annotations,
             "depositions.csv.br" => Depositions,
+            "projects.csv.br" => Projects,
 
             "admin_media.csv.br" => AdminMedia,
             _ => Unknown,
@@ -133,6 +135,7 @@ impl Archive {
                 ImportType::DataProducts => loggers::data_products::import_archive(stream, &meta.dataset)?,
                 ImportType::Annotations => loggers::annotations::import_archive(stream, &meta.dataset)?,
                 ImportType::Depositions => loggers::depositions::import_archive(stream, &meta.dataset)?,
+                ImportType::Projects => loggers::projects::import_archive(stream, &meta.dataset)?,
 
                 ImportType::AdminMedia => loggers::admin_media::import_archive(stream, &meta.dataset)?,
             }
