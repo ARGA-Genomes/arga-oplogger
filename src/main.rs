@@ -179,6 +179,7 @@ pub enum ExtractCommand {
 
 #[derive(clap::Subcommand)]
 pub enum EtlCommand {
+    Refseq,
     Genbank,
     Bioplatforms,
 }
@@ -319,6 +320,16 @@ fn main() -> Result<(), Error> {
         }
 
         Commands::Etl(cmd) => match cmd {
+            EtlCommand::Refseq => match crate::extractor::refseq::extract()? {
+                None => info!("No updates found"),
+                Some(extract) => {
+                    info!("Found update. Transforming and loading");
+                    let transform = crate::transformer::transform(&PathBuf::from(extract))?;
+                    let archive = archive::Archive::new(PathBuf::from(transform));
+                    archive.import()?;
+                }
+            },
+
             EtlCommand::Genbank => match crate::extractor::genbank::extract()? {
                 None => info!("No updates found"),
                 Some(extract) => {
