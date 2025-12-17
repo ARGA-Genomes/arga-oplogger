@@ -41,6 +41,9 @@ pub enum TransformError {
 
     #[error(transparent)]
     ParseIntError(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloatError(#[from] std::num::ParseFloatError),
 }
 
 

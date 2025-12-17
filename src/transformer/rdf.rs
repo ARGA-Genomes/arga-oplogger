@@ -1295,6 +1295,12 @@ pub enum Assembly {
     ComputationalInfrastructure,
     #[iri("fields:system_used")]
     SystemUsed,
+
+    #[iri("fields:level")]
+    Level,
+    #[iri("fields:representation")]
+    Representation,
+
     #[iri("fields:assembly_n50")]
     AssemblyN50,
     #[iri("fields:contig_n50")]
@@ -1351,6 +1357,8 @@ pub enum AssemblyField {
     PolishingOrScaffoldingData(String),
     ComputationalInfrastructure(String),
     SystemUsed(String),
+    Level(String),
+    Representation(String),
 
     NumberOfScaffolds(u64),
     NumberOfContigs(u64),
@@ -1426,9 +1434,10 @@ impl From<(Assembly, Literal)> for AssemblyField {
                 Self::NumberOfGuanineCytosine(str_to_u64(&value).unwrap())
             }
             (GuanineCytosinePercent, Literal::UInt64(value)) => Self::GuanineCytosinePercent(value),
-            (GuanineCytosinePercent, Literal::String(value)) => {
-                Self::GuanineCytosinePercent(str_to_u64(&value).unwrap())
-            }
+            (GuanineCytosinePercent, Literal::String(value)) => match str_to_f32(&value) {
+                Ok(val) => Self::GuanineCytosinePercent(val.round() as u64),
+                Err(_) => Self::GuanineCytosinePercent(str_to_u64(&value).unwrap()),
+            },
             (GenomeCoverage, Literal::String(value)) => Self::GenomeCoverage(value),
             (Hybrid, Literal::String(value)) => Self::Hybrid(value),
             (HybridInformation, Literal::String(value)) => Self::HybridInformation(value),
@@ -1436,6 +1445,9 @@ impl From<(Assembly, Literal)> for AssemblyField {
             (PolishingOrScaffoldingData, Literal::String(value)) => Self::PolishingOrScaffoldingData(value),
             (ComputationalInfrastructure, Literal::String(value)) => Self::ComputationalInfrastructure(value),
             (SystemUsed, Literal::String(value)) => Self::SystemUsed(value),
+            (Level, Literal::String(value)) => Self::Level(value),
+            (Representation, Literal::String(value)) => Self::Representation(value),
+
             (AssemblyN50, Literal::String(value)) => Self::AssemblyN50(value),
             (ContigN50, Literal::UInt64(value)) => Self::ContigN50(value),
             (ContigN50, Literal::String(value)) => Self::ContigN50(str_to_u64(&value).unwrap()),
@@ -1643,19 +1655,23 @@ impl From<(Annotation, Literal)> for AnnotationField {
             (SoftwareVersion, Literal::String(value)) => Self::SoftwareVersion(value),
             (EventDate, Literal::String(value)) => Self::EventDate(value),
             (NumberOfGenes, Literal::UInt64(value)) => Self::NumberOfGenes(value),
-            (NumberOfGenes, Literal::String(value)) => Self::NumberOfGenes(str_to_u64(&value).unwrap()),
+            (NumberOfGenes, Literal::String(value)) => Self::NumberOfGenes(str_to_u64(&value).unwrap_or_default()),
             (NumberOfCodingProteins, Literal::UInt64(value)) => Self::NumberOfCodingProteins(value),
             (NumberOfCodingProteins, Literal::String(value)) => {
-                Self::NumberOfCodingProteins(str_to_u64(&value).unwrap())
+                Self::NumberOfCodingProteins(str_to_u64(&value).unwrap_or_default())
             }
             (NumberOfNonCodingProteins, Literal::UInt64(value)) => Self::NumberOfNonCodingProteins(value),
             (NumberOfNonCodingProteins, Literal::String(value)) => {
-                Self::NumberOfNonCodingProteins(str_to_u64(&value).unwrap())
+                Self::NumberOfNonCodingProteins(str_to_u64(&value).unwrap_or_default())
             }
             (NumberOfPseudogenes, Literal::UInt64(value)) => Self::NumberOfPseudogenes(value),
-            (NumberOfPseudogenes, Literal::String(value)) => Self::NumberOfPseudogenes(str_to_u64(&value).unwrap()),
+            (NumberOfPseudogenes, Literal::String(value)) => {
+                Self::NumberOfPseudogenes(str_to_u64(&value).unwrap_or_default())
+            }
             (NumberOfOtherGenes, Literal::UInt64(value)) => Self::NumberOfOtherGenes(value),
-            (NumberOfOtherGenes, Literal::String(value)) => Self::NumberOfOtherGenes(str_to_u64(&value).unwrap()),
+            (NumberOfOtherGenes, Literal::String(value)) => {
+                Self::NumberOfOtherGenes(str_to_u64(&value).unwrap_or_default())
+            }
             _ => unimplemented!(),
         }
     }
@@ -1896,4 +1912,9 @@ where
 fn str_to_u64(value: &str) -> Result<u64, TransformError> {
     let scrubbed = value.replace(",", "");
     Ok(scrubbed.parse::<u64>()?)
+}
+
+fn str_to_f32(value: &str) -> Result<f32, TransformError> {
+    let scrubbed = value.replace(",", "");
+    Ok(scrubbed.parse::<f32>()?)
 }

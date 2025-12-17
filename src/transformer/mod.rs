@@ -47,9 +47,9 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
     // dataset.load_trig(BufReader::new(ttl::ARGA_TSI))?;
     // dataset.load_trig(BufReader::new(ttl::BIOPLATFORMS))?;
     dataset.load_trig(BufReader::new(ttl::DNAZOO))?;
-    // dataset.load_trig(BufReader::new(ttl::NCBI_TAXONOMY))?;
+    dataset.load_trig(BufReader::new(ttl::NCBI_TAXONOMY))?;
     // dataset.load_trig(BufReader::new(ttl::NCBI_BIOSAMPLES))?;
-    // dataset.load_trig(BufReader::new(ttl::NCBI_GENBANK))?;
+    dataset.load_trig(BufReader::new(ttl::NCBI_GENBANK))?;
     dataset.load_trig(BufReader::new(ttl::NCBI_REPORTS))?;
 
 
