@@ -170,6 +170,7 @@ pub enum PlaziCommand {
 pub enum ExtractCommand {
     Bioplatforms,
     Genbank,
+    Refseq,
     NcbiTaxonomy,
     NcbiDatasets,
     Dnazoo,
@@ -306,6 +307,7 @@ fn main() -> Result<(), Error> {
             let outfile = match cmd {
                 ExtractCommand::Bioplatforms => crate::extractor::bpa::extract()?,
                 ExtractCommand::Genbank => crate::extractor::genbank::extract()?,
+                ExtractCommand::Refseq => crate::extractor::refseq::extract()?,
                 ExtractCommand::NcbiTaxonomy => crate::extractor::ncbi_taxonomy::extract()?,
                 ExtractCommand::NcbiDatasets => crate::extractor::ncbi_datasets::extract()?,
                 ExtractCommand::Dnazoo => crate::extractor::dnazoo::extract()?,
