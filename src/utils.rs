@@ -8,7 +8,7 @@ use arga_core::models::{
     TaxonomicRank,
     TaxonomicStatus,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use heck::ToTitleCase;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::Deserialize;
@@ -450,6 +450,16 @@ where
         },
     })
 }
+
+
+pub fn parse_naive_date_time(value: &str) -> Result<NaiveDateTime, ParseError> {
+    if let Ok(datetime) = NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%z") {
+        return Ok(datetime.into());
+    }
+
+    Ok(NaiveDateTime::parse_from_str(value, "%Y%m%dT%H:%M:%S")?.into())
+}
+
 
 pub fn data_reuse_status_from_str<'de, D>(deserializer: D) -> Result<Option<DataReuseStatus>, D::Error>
 where

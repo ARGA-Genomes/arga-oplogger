@@ -9,6 +9,7 @@ pub mod datasets;
 pub mod depositions;
 pub mod extractions;
 pub mod libraries;
+pub mod name_traits;
 pub mod names;
 pub mod nomenclatural_acts;
 pub mod organisms;

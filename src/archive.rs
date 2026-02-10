@@ -34,6 +34,7 @@ pub enum ImportType {
     Projects,
 
     AdminMedia,
+    NameTraits,
 }
 
 impl From<String> for ImportType {
@@ -63,6 +64,7 @@ impl From<String> for ImportType {
             "projects.csv.br" => Projects,
 
             "admin_media.csv.br" => AdminMedia,
+            "name_traits.csv.br" => NameTraits,
             _ => Unknown,
         }
     }
@@ -138,6 +140,8 @@ impl Archive {
                 ImportType::Projects => loggers::projects::import_archive(stream, &meta.dataset)?,
 
                 ImportType::AdminMedia => loggers::admin_media::import_archive(stream, &meta.dataset)?,
+                ImportType::Names => loggers::names::import_archive(stream)?,
+                ImportType::NameTraits => loggers::name_traits::import_archive(stream)?,
             }
         }
 
