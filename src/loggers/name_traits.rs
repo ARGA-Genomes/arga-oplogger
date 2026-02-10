@@ -80,7 +80,7 @@ pub fn import_archive<S: Read + FrameProgress>(stream: S) -> Result<(), Error> {
 
 pub fn extract<S: Read + FrameProgress>(stream: S, pool: &mut PgPool) -> Result<Vec<NameAttribute>, Error> {
     info!("Loading names");
-    let names = crate::database::canonical_name_lookup(pool)?;
+    let names = crate::database::name_lookup(pool)?;
     let datasets = crate::database::dataset_lookup(pool)?;
 
     let bars = stream.bars();
@@ -96,13 +96,15 @@ pub fn extract<S: Read + FrameProgress>(stream: S, pool: &mut PgPool) -> Result<
 
         let name = record.scientific_name.clone().or(record.clone().canonical_name);
 
-        let Some(name_id) = names.get(&name.unwrap_or_default())
+        let Some(name_id) = names.get(&name.clone().unwrap_or_default())
         else {
+            tracing::warn!(?name, "cannot find name. skipping");
             continue;
         };
 
         let Some(dataset_id) = datasets.get(&record.dataset_id.clone().unwrap_or_default())
         else {
+            tracing::warn!(?record.dataset_id, "cannot find dataset. skipping");
             continue;
         };
 
