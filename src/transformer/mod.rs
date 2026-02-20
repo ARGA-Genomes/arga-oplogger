@@ -1,17 +1,19 @@
-pub mod dataset;
-pub mod errors;
-pub mod models;
-pub mod rdf;
-pub mod resolver;
+// pub mod dataset;
+// pub mod errors;
+// pub mod models;
+// pub mod rdf;
+// pub mod resolver;
 
 
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 
-use dataset::Dataset;
+// use dataset::Dataset;
 use serde::Serialize;
 use tracing::info;
+use transformer::Transformer;
+use transformer::readers::CsvReader;
 
 use crate::errors::{Error, ParseError};
 use crate::loggers::ProgressStream;
@@ -33,24 +35,14 @@ mod ttl {
 pub fn transform(path: &PathBuf) -> Result<String, Error> {
     let meta = meta(path)?;
 
-    info!(mapping = meta.dataset.schema, "Creating triples database (TriG)");
-    let mut dataset = Dataset::new(
-        &meta
-            .dataset
-            .schema
-            .clone()
-            .expect("schema must be set in meta.toml for transformations"),
-    )?;
+    let schema = &meta
+        .dataset
+        .schema
+        .clone()
+        .expect("schema must be set in meta.toml for transformations");
 
-    // load the mapping definitions
-    dataset.load_trig(BufReader::new(ttl::ARGA_PROJECTS))?;
-    // dataset.load_trig(BufReader::new(ttl::ARGA_TSI))?;
-    // dataset.load_trig(BufReader::new(ttl::BIOPLATFORMS))?;
-    dataset.load_trig(BufReader::new(ttl::DNAZOO))?;
-    dataset.load_trig(BufReader::new(ttl::NCBI_TAXONOMY))?;
-    // dataset.load_trig(BufReader::new(ttl::NCBI_BIOSAMPLES))?;
-    dataset.load_trig(BufReader::new(ttl::NCBI_GENBANK))?;
-    dataset.load_trig(BufReader::new(ttl::NCBI_REPORTS))?;
+    info!(schema, "Creating triples database (TriG)");
+    let mut transformer = Transformer::new(schema)?;
 
 
     let file = File::open(path)?;
@@ -80,12 +72,20 @@ pub fn transform(path: &PathBuf) -> Result<String, Error> {
         let stream = ProgressStream::new(input, size as usize, &message);
 
         // dataset.load_csv_oxi(stream, &name)?;
-        let rows = dataset.load(stream, &name)?;
-        info!(path, name, rows, "CSV loaded");
+        // let rows = dataset.load(stream, &name)?;
+
+        let reader = CsvReader::new(stream).unwrap();
+
+        let triples = transformer.load(reader, &name)?;
+        info!(path, name, triples, "CSV loaded");
     }
 
     info!("CSV files loaded into TriG dataset");
-    export(dataset, meta)
+
+    transformer.triples("sample.csv");
+
+    // export(dataset, meta)
+    Ok("".to_string())
 }
 
 
@@ -110,85 +110,85 @@ fn meta(path: &PathBuf) -> Result<Meta, Error> {
 }
 
 
-fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
-    info!("Exporting TriG dataset as importable CSV files");
+// fn export(dataset: Dataset, meta: Meta) -> Result<String, Error> {
+//     info!("Exporting TriG dataset as importable CSV files");
 
-    export_compressed(models::name::get_all(&dataset)?, "names.csv.br")?;
-    export_compressed(models::agent::get_all(&dataset)?, "agents.csv.br")?;
-    export_compressed(models::publications::get_all(&dataset)?, "publications.csv.br")?;
+//     export_compressed(models::name::get_all(&dataset)?, "names.csv.br")?;
+//     export_compressed(models::agent::get_all(&dataset)?, "agents.csv.br")?;
+//     export_compressed(models::publications::get_all(&dataset)?, "publications.csv.br")?;
 
-    export_compressed(models::organism::get_all(&dataset)?, "organisms.csv.br")?;
-    export_compressed(models::collecting::get_all(&dataset)?, "collections.csv.br")?;
-    export_compressed(models::tissue::get_all(&dataset)?, "tissues.csv.br")?;
-    export_compressed(models::subsample::get_all(&dataset)?, "subsamples.csv.br")?;
-    export_compressed(models::extraction::get_all(&dataset)?, "extractions.csv.br")?;
-    export_compressed(models::library::get_all(&dataset)?, "libraries.csv.br")?;
-    export_compressed(models::sequencing_run::get_all(&dataset)?, "sequencing_runs.csv.br")?;
-    export_compressed(models::assembly::get_all(&dataset)?, "assemblies.csv.br")?;
-    export_compressed(models::data_products::get_all(&dataset)?, "data_products.csv.br")?;
-    export_compressed(models::annotation::get_all(&dataset)?, "annotations.csv.br")?;
-    export_compressed(models::deposition::get_all(&dataset)?, "depositions.csv.br")?;
-    export_compressed(models::projects::get_all(&dataset)?, "projects.csv.br")?;
-    export_compressed(models::project_members::get_all(&dataset)?, "project_members.csv.br")?;
+//     export_compressed(models::organism::get_all(&dataset)?, "organisms.csv.br")?;
+//     export_compressed(models::collecting::get_all(&dataset)?, "collections.csv.br")?;
+//     export_compressed(models::tissue::get_all(&dataset)?, "tissues.csv.br")?;
+//     export_compressed(models::subsample::get_all(&dataset)?, "subsamples.csv.br")?;
+//     export_compressed(models::extraction::get_all(&dataset)?, "extractions.csv.br")?;
+//     export_compressed(models::library::get_all(&dataset)?, "libraries.csv.br")?;
+//     export_compressed(models::sequencing_run::get_all(&dataset)?, "sequencing_runs.csv.br")?;
+//     export_compressed(models::assembly::get_all(&dataset)?, "assemblies.csv.br")?;
+//     export_compressed(models::data_products::get_all(&dataset)?, "data_products.csv.br")?;
+//     export_compressed(models::annotation::get_all(&dataset)?, "annotations.csv.br")?;
+//     export_compressed(models::deposition::get_all(&dataset)?, "depositions.csv.br")?;
+//     export_compressed(models::projects::get_all(&dataset)?, "projects.csv.br")?;
+//     export_compressed(models::project_members::get_all(&dataset)?, "project_members.csv.br")?;
 
-    package(meta)
-}
+//     package(meta)
+// }
 
 
-#[tracing::instrument(skip_all)]
-fn export_compressed<T: Serialize>(records: Vec<T>, outfile: &str) -> Result<(), Error> {
-    if records.len() > 0 {
-        let file = File::create(outfile)?;
-        let out = brotli::CompressorWriter::new(file, 8092, 7, 22);
-        let mut writer = csv::Writer::from_writer(out);
+// #[tracing::instrument(skip_all)]
+// fn export_compressed<T: Serialize>(records: Vec<T>, outfile: &str) -> Result<(), Error> {
+//     if records.len() > 0 {
+//         let file = File::create(outfile)?;
+//         let out = brotli::CompressorWriter::new(file, 8092, 7, 22);
+//         let mut writer = csv::Writer::from_writer(out);
 
-        for record in records {
-            writer.serialize(record)?;
-        }
-    }
+//         for record in records {
+//             writer.serialize(record)?;
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
-pub fn package(meta: Meta) -> Result<String, Error> {
-    let filename = format!("{}-{}.tar", meta.dataset.name, meta.dataset.published_at.to_string());
-    info!(?filename, "Packaging export");
+// pub fn package(meta: Meta) -> Result<String, Error> {
+//     let filename = format!("{}-{}.tar", meta.dataset.name, meta.dataset.published_at.to_string());
+//     info!(?filename, "Packaging export");
 
-    // create the toml file for the package metadata
-    let mut file = File::create("meta.toml")?;
-    let toml = toml::to_string_pretty(&meta).unwrap();
-    file.write_all(toml.as_bytes())?;
+//     // create the toml file for the package metadata
+//     let mut file = File::create("meta.toml")?;
+//     let toml = toml::to_string_pretty(&meta).unwrap();
+//     file.write_all(toml.as_bytes())?;
 
-    // create a tar archive containing everything the package needs
-    let file = File::create(&filename)?;
-    let mut archive = tar::Builder::new(file);
+//     // create a tar archive containing everything the package needs
+//     let file = File::create(&filename)?;
+//     let mut archive = tar::Builder::new(file);
 
-    archive.append_path_with_name("meta.toml", "meta.toml")?;
-    append_if_exists(&mut archive, "names.csv.br")?;
-    append_if_exists(&mut archive, "agents.csv.br")?;
-    append_if_exists(&mut archive, "publications.csv.br")?;
-    append_if_exists(&mut archive, "organisms.csv.br")?;
-    append_if_exists(&mut archive, "collections.csv.br")?;
-    append_if_exists(&mut archive, "tissues.csv.br")?;
-    append_if_exists(&mut archive, "subsamples.csv.br")?;
-    append_if_exists(&mut archive, "extractions.csv.br")?;
-    append_if_exists(&mut archive, "libraries.csv.br")?;
-    append_if_exists(&mut archive, "sequencing_runs.csv.br")?;
-    append_if_exists(&mut archive, "assemblies.csv.br")?;
-    append_if_exists(&mut archive, "data_products.csv.br")?;
-    append_if_exists(&mut archive, "annotations.csv.br")?;
-    append_if_exists(&mut archive, "depositions.csv.br")?;
-    append_if_exists(&mut archive, "projects.csv.br")?;
-    append_if_exists(&mut archive, "project_members.csv.br")?;
+//     archive.append_path_with_name("meta.toml", "meta.toml")?;
+//     append_if_exists(&mut archive, "names.csv.br")?;
+//     append_if_exists(&mut archive, "agents.csv.br")?;
+//     append_if_exists(&mut archive, "publications.csv.br")?;
+//     append_if_exists(&mut archive, "organisms.csv.br")?;
+//     append_if_exists(&mut archive, "collections.csv.br")?;
+//     append_if_exists(&mut archive, "tissues.csv.br")?;
+//     append_if_exists(&mut archive, "subsamples.csv.br")?;
+//     append_if_exists(&mut archive, "extractions.csv.br")?;
+//     append_if_exists(&mut archive, "libraries.csv.br")?;
+//     append_if_exists(&mut archive, "sequencing_runs.csv.br")?;
+//     append_if_exists(&mut archive, "assemblies.csv.br")?;
+//     append_if_exists(&mut archive, "data_products.csv.br")?;
+//     append_if_exists(&mut archive, "annotations.csv.br")?;
+//     append_if_exists(&mut archive, "depositions.csv.br")?;
+//     append_if_exists(&mut archive, "projects.csv.br")?;
+//     append_if_exists(&mut archive, "project_members.csv.br")?;
 
-    archive.finish()?;
-    Ok(filename)
-}
+//     archive.finish()?;
+//     Ok(filename)
+// }
 
-fn append_if_exists(archive: &mut tar::Builder<File>, filename: &str) -> Result<(), Error> {
-    if std::path::Path::new(&filename).exists() {
-        archive.append_path_with_name(filename, filename)?;
-    }
+// fn append_if_exists(archive: &mut tar::Builder<File>, filename: &str) -> Result<(), Error> {
+//     if std::path::Path::new(&filename).exists() {
+//         archive.append_path_with_name(filename, filename)?;
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }

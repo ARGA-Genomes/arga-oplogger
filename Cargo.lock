@@ -599,14 +599,14 @@ dependencies = [
 
 [[package]]
 name = "csv"
-version = "1.3.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac574ff4d437a7b5ad237ef331c17ccca63c46479e5b5453eb8e10bb99a759fe"
+checksum = "52cd9d68cf7efc6ddfaaee42e7288d3a99d613d4b50f76ce9827ae0c6e14f938"
 dependencies = [
  "csv-core",
  "itoa",
  "ryu",
- "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -1556,6 +1556,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "transformer",
  "ureq",
  "uuid",
  "xxhash-rust",
@@ -1598,6 +1599,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
+name = "oxrdf"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a04761319ef84de1f59782f189d072cbfc3a9a40c4e8bded8667202fbd35b02a"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "rand",
+ "thiserror 2.0.16",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1629,6 +1642,33 @@ dependencies = [
  "thiserror 1.0.63",
  "utf8-decode",
 ]
+
+[[package]]
+name = "peg"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9928cfca101b36ec5163e70049ee5368a8a1c3c6efc9ca9c5f9cc2f816152477"
+dependencies = [
+ "peg-macros",
+ "peg-runtime",
+]
+
+[[package]]
+name = "peg-macros"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6298ab04c202fa5b5d52ba03269fb7b74550b150323038878fe6c372d8280f71"
+dependencies = [
+ "peg-runtime",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "peg-runtime"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "132dca9b868d927b35b5dd728167b2dee150eb1ad686008fc71ccb298b776fca"
 
 [[package]]
 name = "percent-encoding"
@@ -2039,6 +2079,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2095,6 +2141,7 @@ dependencies = [
  "sophia_isomorphism",
  "sophia_resource",
  "sophia_rio",
+ "sophia_sparql",
  "sophia_term",
  "sophia_turtle",
 ]
@@ -2184,6 +2231,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sophia_sparql"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6393da350dacc9f1d9bf57df4ccbf39f9c1c8e10554747d91bd1321413b10a82"
+dependencies = [
+ "bigdecimal",
+ "chrono",
+ "num-bigint",
+ "oxiri",
+ "rand",
+ "sophia_api",
+ "sophia_inmem",
+ "sophia_iri",
+ "sophia_term",
+ "spargebra",
+ "thiserror 2.0.16",
+ "uuid",
+]
+
+[[package]]
 name = "sophia_term"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2206,6 +2273,20 @@ dependencies = [
  "sophia_api",
  "sophia_iri",
  "sophia_rio",
+]
+
+[[package]]
+name = "spargebra"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8907e262be4b4b363218f4688f5654d423a958aa4b8d7c7a7f898be591fa474e"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "peg",
+ "rand",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -2586,9 +2667,9 @@ dependencies = [
 
 [[package]]
 name = "tracing"
-version = "0.1.40"
+version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
+checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
  "pin-project-lite",
  "tracing-attributes",
@@ -2597,9 +2678,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.27"
+version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
+checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2608,9 +2689,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.32"
+version = "0.1.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
+checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
  "valuable",
@@ -2639,6 +2720,19 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "transformer"
+version = "0.1.0"
+dependencies = [
+ "csv",
+ "iref",
+ "iref-enum",
+ "sophia",
+ "static-iref",
+ "thiserror 2.0.16",
+ "tracing",
 ]
 
 [[package]]
@@ -2749,6 +2843,7 @@ dependencies = [
  "getrandom 0.3.3",
  "js-sys",
  "serde",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 
